@@ -1,0 +1,1521 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>vssrc</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232e6b3f'/%3E%3Cpath d='M9 11l-4 5 4 5M23 11l4 5-4 5M18 9l-4 14' stroke='%23fff' stroke-width='2.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<script>
+	// Before first paint, so an explicit theme choice never flashes the system one.
+	try {
+		const t = localStorage.getItem("vssrc.theme");
+		if (t === "light" || t === "dark")
+			document.documentElement.dataset.theme = t;
+	} catch {}
+</script>
+<style>
+@font-face {
+	font-family: "Geist";
+	src: url(data:font/woff2;base64,{{GEIST}}) format("woff2");
+	font-weight: 100 900;
+	font-display: swap;
+}
+@font-face {
+	font-family: "Geist Mono";
+	src: url(data:font/woff2;base64,{{GEIST_MONO}}) format("woff2");
+	font-weight: 100 900;
+	font-display: swap;
+}
+
+:root {
+	font-size: 16px;
+	--font: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+	--mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+	--bar: 3.25rem;
+	--side: clamp(17rem, 22vw, 24rem);
+
+	color-scheme: light;
+	--bg: #f6f6f3;
+	--panel: #ffffff;
+	--sunken: #efefeb;
+	--line: #e2e2dd;
+	--text: #1c1c1a;
+	--muted: #66665f;
+	--faint: #94948c;
+	--accent: #2e6b3f;
+	--accent-text: #ffffff;
+	--danger: #b3261e;
+	--ok: #2e7d32;
+	--warn: #9a6200;
+	--target: #fbefb8;
+	--backdrop: rgb(20 20 18 / 0.32);
+
+	--sx-k: #8a35a6;
+	--sx-t: #0b6c82;
+	--sx-m: #845000;
+	--sx-f: #2b58a0;
+	--sx-s: #2c7533;
+	--sx-n: #ad4326;
+	--sx-c: #85857e;
+	--sx-v: #1c1c1a;
+}
+@media (prefers-color-scheme: dark) {
+	:root:not([data-theme="light"]) {
+		color-scheme: dark;
+		--bg: #111210;
+		--panel: #171816;
+		--sunken: #1e1f1c;
+		--line: #2a2b28;
+		--text: #e6e6e0;
+		--muted: #9d9d95;
+		--faint: #6c6d67;
+		--accent: #82c592;
+		--accent-text: #0e1a11;
+		--danger: #f08a82;
+		--ok: #82c592;
+		--warn: #e2b45e;
+		--target: #3b3520;
+		--backdrop: rgb(0 0 0 / 0.55);
+
+		--sx-k: #d0a0f2;
+		--sx-t: #6fcadb;
+		--sx-m: #e9bd70;
+		--sx-f: #96b9f0;
+		--sx-s: #a2d38f;
+		--sx-n: #f2a382;
+		--sx-c: #76776f;
+		--sx-v: #e6e6e0;
+	}
+}
+:root[data-theme="dark"] {
+	color-scheme: dark;
+	--bg: #111210;
+	--panel: #171816;
+	--sunken: #1e1f1c;
+	--line: #2a2b28;
+	--text: #e6e6e0;
+	--muted: #9d9d95;
+	--faint: #6c6d67;
+	--accent: #82c592;
+	--accent-text: #0e1a11;
+	--danger: #f08a82;
+	--ok: #82c592;
+	--warn: #e2b45e;
+	--target: #3b3520;
+	--backdrop: rgb(0 0 0 / 0.55);
+
+	--sx-k: #d0a0f2;
+	--sx-t: #6fcadb;
+	--sx-m: #e9bd70;
+	--sx-f: #96b9f0;
+	--sx-s: #a2d38f;
+	--sx-n: #f2a382;
+	--sx-c: #76776f;
+	--sx-v: #e6e6e0;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+	margin: 0;
+	background: var(--bg);
+	color: var(--text);
+	font: 400 0.875rem/1.5 var(--font);
+	-webkit-text-size-adjust: 100%;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+button, input { font: inherit; color: inherit; }
+a { color: inherit; }
+:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+	border-radius: 0.25rem;
+}
+kbd {
+	font: 500 0.75rem/1 var(--mono);
+	border: 1px solid var(--line);
+	border-radius: 0.25rem;
+	padding: 0.1875rem 0.375rem;
+	color: var(--muted);
+	background: var(--panel);
+}
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+
+/* ---- Bar ---- */
+.bar {
+	flex: none;
+	height: calc(var(--bar) + env(safe-area-inset-top));
+	padding: env(safe-area-inset-top) max(1rem, env(safe-area-inset-right)) 0 max(1rem, env(safe-area-inset-left));
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	background: var(--panel);
+	border-bottom: 1px solid var(--line);
+}
+.brand {
+	font: 600 1rem/1 var(--mono);
+	letter-spacing: -0.02em;
+	text-decoration: none;
+	padding: 0.5rem 0.25rem;
+	margin-right: 0.25rem;
+}
+.spacer { flex: 1; }
+.icon-button, .chip {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.375rem;
+	min-width: 2.5rem;
+	height: 2.5rem;
+	padding: 0 0.625rem;
+	border: 1px solid transparent;
+	border-radius: 0.5rem;
+	background: none;
+	cursor: pointer;
+}
+.icon-button:hover, .chip:hover { background: var(--sunken); }
+.chip { border-color: var(--line); font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 0.8125rem; }
+.icon-button svg, .chip svg { width: 1.125rem; height: 1.125rem; flex: none; }
+.chip svg { width: 0.875rem; height: 0.875rem; color: var(--muted); }
+#types-button { display: none; }
+.status {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.375rem;
+	font-size: 0.75rem;
+	color: var(--muted);
+	white-space: nowrap;
+}
+.dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--faint); flex: none; }
+.dot.ok { background: var(--ok); }
+.dot.warn { background: var(--warn); }
+.dot.error { background: var(--danger); }
+.dot.hollow { background: none; box-shadow: inset 0 0 0 1.5px var(--faint); }
+
+/* ---- Buttons ---- */
+.button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.5rem;
+	min-height: 2.75rem;
+	padding: 0 1rem;
+	border: 1px solid var(--line);
+	border-radius: 0.5rem;
+	background: var(--panel);
+	font-weight: 500;
+	text-decoration: none;
+	cursor: pointer;
+	white-space: nowrap;
+}
+.button:hover { background: var(--sunken); }
+.button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.button.primary:hover { filter: brightness(1.08); }
+.button.small { min-height: 2.25rem; padding: 0 0.75rem; font-size: 0.8125rem; }
+.button.danger { color: var(--danger); }
+.button[aria-disabled="true"] { opacity: 0.5; pointer-events: none; }
+
+/* ---- Start / import ---- */
+#start {
+	flex: 1;
+	overflow: auto;
+	display: grid;
+	place-items: center;
+	padding: 2rem 1rem calc(2rem + env(safe-area-inset-bottom));
+}
+.start-inner { width: min(34rem, 100%); }
+.start-inner h1 {
+	font-size: clamp(1.75rem, 1.2rem + 2vw, 2.25rem);
+	line-height: 1.15;
+	letter-spacing: -0.03em;
+	font-weight: 600;
+	margin: 0 0 2rem;
+}
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 1rem; }
+.steps li {
+	display: grid;
+	grid-template-columns: 1.75rem 1fr;
+	gap: 0.25rem 0.75rem;
+	align-items: start;
+}
+.step-n {
+	width: 1.75rem; height: 1.75rem;
+	border-radius: 50%;
+	display: grid; place-items: center;
+	font: 500 0.8125rem/1 var(--mono);
+	background: var(--sunken);
+	color: var(--muted);
+	margin-top: 0.125rem;
+}
+.step-title { font-weight: 600; font-size: 1rem; margin: 0.125rem 0 0.5rem; }
+.step-body { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; }
+.download {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	padding: 0.75rem 1rem;
+	border: 1px solid var(--line);
+	border-radius: 0.5rem;
+	background: var(--panel);
+	text-decoration: none;
+	min-width: 0;
+	max-width: 100%;
+}
+.download:hover { background: var(--sunken); }
+.download svg { width: 1.125rem; height: 1.125rem; flex: none; color: var(--muted); }
+.download .file { font: 0.8125rem/1.3 var(--mono); overflow-wrap: anywhere; }
+.download .size { font-size: 0.75rem; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.drop-hint { font-size: 0.8125rem; color: var(--muted); }
+#file-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.import { position: relative; border-radius: 0.75rem; }
+.import.dragging { outline: 2px dashed var(--accent); outline-offset: 0.75rem; }
+.progress { margin-top: 1.5rem; display: grid; gap: 0.5rem; }
+.progress-track { height: 0.375rem; border-radius: 1rem; background: var(--sunken); overflow: hidden; }
+.progress-fill { height: 100%; width: 0; background: var(--text); border-radius: inherit; transition: width 160ms ease-out; }
+.progress-fill.indeterminate { width: 100%; opacity: 0.35; }
+.progress-text { font-size: 0.8125rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.error {
+	margin: 1.5rem 0 0;
+	padding: 0.75rem 1rem;
+	border-radius: 0.5rem;
+	border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
+	background: color-mix(in srgb, var(--danger) 8%, transparent);
+	color: var(--danger);
+	font-size: 0.8125rem;
+	overflow-wrap: anywhere;
+}
+
+/* ---- Browser ---- */
+#browser { flex: 1; display: flex; min-height: 0; }
+#sidebar {
+	width: var(--side);
+	flex: none;
+	display: flex;
+	flex-direction: column;
+	background: var(--panel);
+	border-right: 1px solid var(--line);
+	min-height: 0;
+}
+.search {
+	flex: none;
+	position: relative;
+	padding: 0.75rem;
+	border-bottom: 1px solid var(--line);
+}
+.search input {
+	width: 100%;
+	height: 2.5rem;
+	padding: 0 2.5rem 0 0.75rem;
+	border: 1px solid var(--line);
+	border-radius: 0.5rem;
+	background: var(--bg);
+	font-size: 1rem; /* 16px keeps iOS Safari from zooming on focus */
+	outline: none;
+}
+.search input:focus-visible { border-color: var(--accent); outline: 2px solid color-mix(in srgb, var(--accent) 30%, transparent); outline-offset: 0; }
+.search input::-webkit-search-cancel-button { display: none; }
+.search kbd { position: absolute; right: 1.375rem; top: 50%; transform: translateY(-50%); pointer-events: none; }
+.search input:focus + kbd, .search input:not(:placeholder-shown) + kbd { display: none; }
+.side-scroll { flex: 1; overflow: auto; overscroll-behavior: contain; padding: 0.5rem 0 calc(1rem + env(safe-area-inset-bottom)); }
+.side-note { padding: 1rem; font-size: 0.8125rem; color: var(--muted); display: flex; gap: 0.5rem; align-items: center; }
+.side-note.error-text { color: var(--danger); align-items: flex-start; overflow-wrap: anywhere; }
+.tree-assembly {
+	font: 500 0.6875rem/1 var(--mono);
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--faint);
+	padding: 1rem 1rem 0.5rem;
+}
+.tree-assembly:first-child { padding-top: 0.5rem; }
+details > summary {
+	list-style: none;
+	display: flex;
+	align-items: center;
+	gap: 0.375rem;
+	padding: 0.3125rem 0.75rem 0.3125rem 0.625rem;
+	cursor: pointer;
+	font-family: var(--mono);
+	font-size: 0.8125rem;
+	color: var(--muted);
+	user-select: none;
+}
+details > summary::-webkit-details-marker { display: none; }
+details > summary::before {
+	content: "";
+	width: 0.375rem; height: 0.375rem;
+	border-right: 1.5px solid currentColor;
+	border-bottom: 1.5px solid currentColor;
+	transform: rotate(-45deg);
+	margin: 0 0.25rem 0 0.125rem;
+	flex: none;
+	transition: transform 140ms ease-out;
+}
+details[open] > summary::before { transform: rotate(45deg); }
+details > summary:hover { color: var(--text); background: var(--sunken); }
+summary .ns { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+summary .count { font-size: 0.75rem; color: var(--faint); font-variant-numeric: tabular-nums; }
+.item {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	padding: 0.25rem 0.75rem 0.25rem 2rem;
+	text-decoration: none;
+	font-family: var(--mono);
+	font-size: 0.8125rem;
+	white-space: nowrap;
+	min-height: 1.875rem;
+}
+.item:hover { background: var(--sunken); }
+.item[aria-current="page"], .item.active { background: var(--sunken); box-shadow: inset 2px 0 0 var(--text); }
+.item .name { overflow: hidden; text-overflow: ellipsis; }
+.item .where { color: var(--faint); overflow: hidden; text-overflow: ellipsis; font-size: 0.75rem; min-width: 0; flex: 1; text-align: right; }
+.kind {
+	flex: none;
+	width: 1.125rem;
+	height: 1.125rem;
+	border-radius: 0.25rem;
+	display: grid;
+	place-items: center;
+	font: 600 0.625rem/1 var(--mono);
+	color: var(--sx-t);
+	background: color-mix(in srgb, currentColor 14%, transparent);
+}
+.kind.m { color: var(--sx-m); }
+.kind.f { color: var(--sx-f); }
+.results .item { padding-left: 0.75rem; }
+.results-more { padding: 0.5rem 1rem; font-size: 0.75rem; color: var(--faint); }
+
+#viewer { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.viewer-head {
+	flex: none;
+	display: flex;
+	align-items: baseline;
+	flex-wrap: wrap;
+	gap: 0.25rem 0.75rem;
+	padding: 0.875rem 1.25rem;
+	border-bottom: 1px solid var(--line);
+	min-height: 3.5rem;
+}
+.viewer-head h1 {
+	font: 600 1.25rem/1.25 var(--mono);
+	letter-spacing: -0.02em;
+	margin: 0;
+	overflow-wrap: anywhere;
+}
+.viewer-head .ns { font: 0.8125rem/1.3 var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+.viewer-head .status { margin-left: auto; }
+#code-scroll { flex: 1; overflow: auto; min-height: 0; background: var(--panel); }
+#code-scroll pre {
+	margin: 0;
+	padding: 1rem 1.25rem calc(3rem + env(safe-area-inset-bottom));
+	font: 0.8125rem/1.6 var(--mono);
+	tab-size: 4;
+	-moz-tab-size: 4;
+	white-space: pre;
+	width: max-content;
+	min-width: 100%;
+}
+#code .k { color: var(--sx-k); }
+#code .t { color: var(--sx-t); }
+#code .m { color: var(--sx-m); }
+#code .f { color: var(--sx-f); }
+#code .s { color: var(--sx-s); }
+#code .n { color: var(--sx-n); }
+#code .c { color: var(--sx-c); font-style: italic; }
+#code .v { color: var(--sx-v); }
+#code a { text-decoration: none; }
+#code a:hover { text-decoration: underline; text-underline-offset: 0.2em; }
+#code .target { background: var(--target); border-radius: 0.1875rem; box-shadow: 0 0 0 0.1875rem var(--target); }
+.viewer-note {
+	flex: 1;
+	display: grid;
+	place-items: center;
+	padding: 2rem 1rem;
+	text-align: center;
+	color: var(--muted);
+}
+.viewer-note .error { margin: 0; text-align: left; max-width: 40rem; }
+.viewer-note p { margin: 0; }
+
+/* ---- Dialog ---- */
+dialog {
+	border: 1px solid var(--line);
+	border-radius: 0.875rem;
+	background: var(--panel);
+	color: var(--text);
+	padding: 0;
+	width: min(32rem, calc(100vw - 2rem));
+	max-height: calc(100dvh - 2rem);
+	overflow: auto;
+}
+dialog::backdrop { background: var(--backdrop); }
+.dialog-head { display: flex; align-items: center; padding: 1rem 1rem 0 1.25rem; }
+.dialog-head h2 { font-size: 1rem; font-weight: 600; margin: 0; flex: 1; }
+.dialog-section { padding: 1rem 1.25rem; }
+.dialog-section + .dialog-section { border-top: 1px solid var(--line); }
+.dialog-section h3 { font-size: 0.75rem; font-weight: 500; color: var(--muted); margin: 0 0 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.version-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.25rem; }
+.version-row {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	min-height: 3rem;
+	padding: 0.25rem 0.25rem 0.25rem 0.75rem;
+	border-radius: 0.5rem;
+}
+.version-row.current { background: var(--sunken); }
+.version-row .v { font: 600 0.9375rem/1.2 var(--mono); }
+.version-row .meta { font-size: 0.75rem; color: var(--muted); font-variant-numeric: tabular-nums; flex: 1; }
+.version-row .actions { display: flex; gap: 0.25rem; align-items: center; }
+.version-row .confirm { font-size: 0.8125rem; color: var(--danger); margin-right: 0.25rem; }
+.storage { padding: 0 1.25rem 1.25rem; }
+dialog .import .steps { gap: 0.75rem; }
+
+/* ---- Phone: the sidebar becomes a sheet over the viewer ---- */
+@media (max-width: 47.99rem) {
+	#types-button { display: inline-flex; margin-left: -0.5rem; }
+	.brand { display: none; }
+	#runtime-status .label { display: none; }
+	#sidebar {
+		position: fixed;
+		z-index: 5;
+		top: calc(var(--bar) + env(safe-area-inset-top));
+		left: 0; right: 0; bottom: 0;
+		width: auto;
+		border-right: 0;
+	}
+	#sidebar:not(.open) { display: none; }
+	.item, details > summary { min-height: 2.5rem; }
+	.viewer-head { padding: 0.75rem 1rem; }
+	#code-scroll pre { padding: 0.75rem 1rem calc(3rem + env(safe-area-inset-bottom)); font-size: 0.75rem; }
+	.drop-hint { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*, *::before, *::after { transition: none !important; }
+}
+</style>
+</head>
+<body>
+
+<header class="bar">
+	<button class="icon-button" id="types-button" aria-label="Types" aria-expanded="false" aria-controls="sidebar" hidden>
+		<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+	</button>
+	<a class="brand" href="#">vssrc</a>
+	<button class="chip" id="version-button" aria-haspopup="dialog" hidden>
+		<span id="version-label"></span>
+		<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+	</button>
+	<span class="spacer"></span>
+	<span class="status" id="runtime-status"><span class="dot warn"></span><span class="label">Starting</span></span>
+	<button class="icon-button" id="theme-button" aria-label="Toggle theme">
+		<svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+		<svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5Z"/></svg>
+	</button>
+</header>
+
+<main id="start" hidden>
+	<div class="start-inner">
+		<h1>Vintage Story source</h1>
+		<div id="import-home"></div>
+	</div>
+</main>
+
+<div id="browser" hidden>
+	<nav id="sidebar" aria-label="Types">
+		<div class="search">
+			<input id="search" type="search" placeholder="Search types and members" autocomplete="off" spellcheck="false" autocapitalize="off"
+				role="combobox" aria-expanded="false" aria-controls="results" aria-autocomplete="list">
+			<kbd>/</kbd>
+		</div>
+		<div class="side-scroll" id="side-scroll">
+			<div class="side-note" id="side-note" hidden></div>
+			<div class="results" id="results" role="listbox" aria-label="Search results" hidden></div>
+			<div id="tree"></div>
+		</div>
+	</nav>
+	<section id="viewer" aria-live="polite">
+		<div class="viewer-head" id="viewer-head" hidden>
+			<h1 id="type-name"></h1>
+			<span class="ns" id="type-ns"></span>
+			<span class="status" id="view-status"></span>
+		</div>
+		<div id="code-scroll" hidden><pre><code id="code"></code></pre></div>
+		<div class="viewer-note" id="viewer-note"></div>
+	</section>
+</div>
+
+<dialog id="versions-dialog" aria-labelledby="versions-title">
+	<div class="dialog-head">
+		<h2 id="versions-title">Versions</h2>
+		<button class="icon-button" id="versions-close" aria-label="Close">
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+		</button>
+	</div>
+	<div class="dialog-section">
+		<ul class="version-list" id="version-list"></ul>
+	</div>
+	<div class="dialog-section">
+		<h3>Add version</h3>
+		<div id="import-dialog"></div>
+	</div>
+	<div class="storage status" id="storage-status"></div>
+</dialog>
+
+<!-- One import block, moved between the start screen and the dialog. -->
+<template id="import-template">
+	<div class="import" id="import">
+		<ol class="steps">
+			<li>
+				<span class="step-n">1</span>
+				<div>
+					<p class="step-title">Download the Linux client</p>
+					<a class="download" id="download-link" href="#">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14"/></svg>
+						<span class="file" id="download-file"></span>
+						<span class="size" id="download-size"></span>
+					</a>
+				</div>
+			</li>
+			<li>
+				<span class="step-n">2</span>
+				<div>
+					<p class="step-title">Open it here</p>
+					<div class="step-body">
+						<label class="button primary" id="choose-button" for="file-input" tabindex="0" role="button">Choose file</label>
+						<input type="file" id="file-input" tabindex="-1">
+						<span class="drop-hint">or drop it here</span>
+					</div>
+				</div>
+			</li>
+		</ol>
+		<div class="progress" id="import-progress" hidden>
+			<div class="progress-track"><div class="progress-fill" id="import-fill"></div></div>
+			<span class="progress-text" id="import-text"></span>
+		</div>
+		<p class="error" id="import-error" role="alert" hidden></p>
+	</div>
+</template>
+
+<script type="text/plain" id="worker-src">{{WORKER}}</script>
+<script type="application/octet-stream" id="bundle">{{BUNDLE}}</script>
+
+<script type="module">
+// The CDN sends no CORS headers, so the page cannot look up the latest version; bump this on release.
+const LATEST = { version: "1.22.7", size: "590.5 MB" };
+
+const $ = (id) => document.getElementById(id);
+const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+const phone = matchMedia("(max-width: 47.99rem)");
+const mb = (n) => (n / 1048576).toFixed(n < 10485760 ? 1 : 0);
+const store = {
+	get(key) { try { return localStorage.getItem(key); } catch { return null; } },
+	set(key, value) { try { localStorage.setItem(key, value); } catch {} },
+};
+
+// ---- Theme ----------------------------------------------------------------------------------
+
+const darkQuery = matchMedia("(prefers-color-scheme: dark)");
+function effectiveTheme() {
+	return document.documentElement.dataset.theme ?? (darkQuery.matches ? "dark" : "light");
+}
+function renderThemeButton() {
+	const dark = effectiveTheme() === "dark";
+	// Shows the theme a click switches to.
+	$("theme-button").querySelector(".sun").style.display = dark ? "" : "none";
+	$("theme-button").querySelector(".moon").style.display = dark ? "none" : "";
+	$("theme-button").setAttribute("aria-label", dark ? "Light theme" : "Dark theme");
+}
+$("theme-button").addEventListener("click", () => {
+	const next = effectiveTheme() === "dark" ? "light" : "dark";
+	document.documentElement.dataset.theme = next;
+	store.set("vssrc.theme", next);
+	renderThemeButton();
+});
+darkQuery.addEventListener("change", renderThemeButton);
+renderThemeButton();
+
+// ---- Worker ---------------------------------------------------------------------------------
+
+const unsupported = !("DecompressionStream" in self) || typeof WebAssembly !== "object" || !("indexedDB" in self);
+let worker = null;
+let seq = 0;
+const pending = new Map();
+let onProgress = null;
+
+function call(op, args = {}) {
+	return new Promise((resolve, reject) => {
+		if (!worker)
+			return reject(new Error("The decompiler is not running"));
+		const id = ++seq;
+		pending.set(id, { resolve, reject });
+		worker.postMessage({ id, op, ...args });
+	});
+}
+
+function startWorker() {
+	const source = $("worker-src").textContent;
+	worker = new Worker(URL.createObjectURL(new Blob([source], { type: "text/javascript" })), { type: "module" });
+	worker.onmessage = ({ data }) => {
+		if (data.progress) {
+			onProgress?.(data.progress);
+			return;
+		}
+		const p = pending.get(data.id);
+		pending.delete(data.id);
+		if ("error" in data)
+			p?.reject(new Error(data.error));
+		else
+			p?.resolve(data.result);
+	};
+	worker.onerror = (e) => {
+		e.preventDefault();
+		setRuntime("error", e.message || "The decompiler worker crashed");
+		for (const [, p] of pending)
+			p.reject(new Error(e.message || "The decompiler worker crashed"));
+		pending.clear();
+	};
+	const bundle = $("bundle");
+	const text = bundle.textContent;
+	bundle.remove();
+	return call("init", { bundle: text });
+}
+
+let runtimeState = "starting";
+let runtimeError = "";
+function setRuntime(s, message = "") {
+	runtimeState = s;
+	runtimeError = message;
+	const el = $("runtime-status");
+	el.querySelector(".dot").className = "dot " + (s === "ready" ? "ok" : s === "error" ? "error" : "warn");
+	el.querySelector(".label").textContent = s === "ready" ? "Ready" : s === "error" ? "Decompiler failed" : "Starting";
+	el.title = message;
+	// The ready dot only matters while something waits on it.
+	el.hidden = s === "ready";
+	if (s === "error")
+		renderSideNote();
+}
+
+// ---- State ----------------------------------------------------------------------------------
+
+const state = {
+	versions: [],
+	/** Version whose listing is loaded or loading. */
+	version: null,
+	listing: null,
+	listingPromise: null,
+	listingError: "",
+	/** { v, a, t } of the type in the viewer. */
+	shown: null,
+	cache: new Map(),
+};
+
+function parseHash() {
+	const p = new URLSearchParams(location.hash.slice(1));
+	return { v: p.get("v"), a: p.get("a"), t: p.get("t"), m: p.get("m") };
+}
+function hashFor({ v, a, t, m }) {
+	const p = new URLSearchParams();
+	p.set("v", v);
+	if (a) p.set("a", a);
+	if (t) p.set("t", t);
+	if (m) p.set("m", m);
+	return "#" + p.toString();
+}
+function preferredVersion() {
+	const last = store.get("vssrc.version");
+	if (state.versions.some((x) => x.version === last))
+		return last;
+	return [...state.versions].sort((a, b) => b.imported - a.imported)[0]?.version ?? null;
+}
+
+async function refreshVersions() {
+	state.versions = await call("versions");
+	renderVersions();
+}
+
+// ---- Routing --------------------------------------------------------------------------------
+
+let routeSeq = 0;
+
+async function route() {
+	const seqHere = ++routeSeq;
+	const h = parseHash();
+	if (!state.versions.length) {
+		showStart();
+		return;
+	}
+	showBrowser();
+	if (!h.v || !state.versions.some((x) => x.version === h.v)) {
+		const v = preferredVersion();
+		if (h.v) {
+			// A link to a version that is not imported: say so instead of silently switching.
+			await loadVersion(v);
+			if (seqHere !== routeSeq) return;
+			showViewerNote(`${h.v} is not imported.`, { action: "Add version", onAction: openVersions });
+			return;
+		}
+		history.replaceState(null, "", hashFor({ v }));
+		return route();
+	}
+	await loadVersion(h.v);
+	if (seqHere !== routeSeq) return;
+	if (!state.listing) return;
+	if (!h.t) {
+		state.shown = null;
+		markCurrent(null);
+		showViewerNote("Pick a type from the list, or press / to search.");
+		if (phone.matches) openSheet(false);
+		return;
+	}
+	await showType(h.v, h.a, h.t, h.m, seqHere);
+}
+
+addEventListener("hashchange", route);
+
+// ---- Version listing ------------------------------------------------------------------------
+
+function loadVersion(v) {
+	if (state.version === v && state.listingPromise)
+		return state.listingPromise;
+	state.version = v;
+	state.listing = null;
+	state.listingError = "";
+	store.set("vssrc.version", v);
+	$("version-label").textContent = v;
+	$("tree").replaceChildren();
+	hideResults();
+	renderVersions();
+	renderSideNote();
+	const started = performance.now();
+	const tick = setInterval(() => renderSideNote(performance.now() - started), 250);
+	state.listingPromise = call("open", { version: v })
+		.then((tsv) => {
+			if (state.version !== v) return;
+			state.listing = parseListing(v, tsv);
+			renderTree();
+			runSearch();
+		})
+		.catch((err) => {
+			if (state.version !== v) return;
+			state.listingError = err.message;
+			state.listingPromise = null;
+		})
+		.finally(() => {
+			clearInterval(tick);
+			if (state.version === v) renderSideNote();
+		});
+	return state.listingPromise;
+}
+
+function renderSideNote(elapsed) {
+	const note = $("side-note");
+	note.className = "side-note";
+	if (runtimeState === "error") {
+		note.classList.add("error-text");
+		note.textContent = "The decompiler failed to start: " + runtimeError;
+	} else if (state.listingError) {
+		note.classList.add("error-text");
+		note.textContent = state.listingError;
+	} else if (!state.listing && state.version) {
+		const seconds = elapsed ? ` · ${(elapsed / 1000).toFixed(0)} s` : "";
+		note.replaceChildren(dot("warn"), text(runtimeState === "starting" ? `Starting decompiler${seconds}` : `Loading ${state.version}${seconds}`));
+	} else {
+		note.hidden = true;
+		return;
+	}
+	note.hidden = false;
+}
+
+function dot(cls) {
+	const d = document.createElement("span");
+	d.className = "dot " + cls;
+	return d;
+}
+function text(s) {
+	return document.createTextNode(s);
+}
+
+/** Splits "Ns.Sub.Outer+Inner`1" into namespace, display name (Outer.Inner) and simple name. */
+function splitTypeName(reflectionName) {
+	const plus = reflectionName.indexOf("+");
+	const outer = plus < 0 ? reflectionName : reflectionName.slice(0, plus);
+	const dotAt = outer.lastIndexOf(".");
+	const ns = dotAt < 0 ? "" : outer.slice(0, dotAt);
+	const display = reflectionName.slice(dotAt + 1).replace(/`\d+/g, "").replace(/\+/g, ".");
+	return { ns, display, simple: display.slice(display.lastIndexOf(".") + 1) };
+}
+
+const KIND_LETTER = { class: "C", static: "C", abstract: "C", interface: "I", struct: "S", enum: "E", delegate: "D", method: "M", field: "F", property: "P", event: "E" };
+
+function parseListing(v, tsv) {
+	const types = [];
+	const members = [];
+	const assemblies = [];
+	const byName = new Map();
+	for (const line of tsv.split("\n")) {
+		if (!line) continue;
+		const f = line.split("\t");
+		if (f[0] === "T") {
+			const [, a, name, kind, top, token] = f;
+			const { ns, display, simple } = splitTypeName(name);
+			const t = { a, name, kind, top, token, ns, display, lower: simple.toLowerCase(), full: (ns ? ns + "." : "") + display };
+			t.href = hashFor({ v, a, t: top, m: top === name ? null : token });
+			types.push(t);
+			byName.set(a + "|" + name, t);
+			if (!assemblies.includes(a)) assemblies.push(a);
+		} else if (f[0] === "M") {
+			const [, a, display, kind, top, token, declaring] = f;
+			const owner = splitTypeName(declaring);
+			const simple = display.replace(/\(.*$/, "");
+			members.push({
+				a, display, kind, token, owner: owner.display,
+				lower: simple.toLowerCase(),
+				full: (owner.display + "." + simple).toLowerCase(),
+				href: hashFor({ v, a, t: top, m: token }),
+			});
+		}
+	}
+	for (const t of types) t.fullLower = t.full.toLowerCase();
+	return { v, types, members, assemblies, byName };
+}
+
+function renderTree() {
+	const { types, assemblies } = state.listing;
+	const frag = document.createDocumentFragment();
+	for (const a of assemblies) {
+		const head = document.createElement("div");
+		head.className = "tree-assembly";
+		head.textContent = a;
+		frag.append(head);
+		const groups = new Map();
+		for (const t of types)
+			if (t.a === a && t.top === t.name) {
+				if (!groups.has(t.ns)) groups.set(t.ns, []);
+				groups.get(t.ns).push(t);
+			}
+		for (const ns of [...groups.keys()].sort()) {
+			const list = groups.get(ns).sort((x, y) => x.display.localeCompare(y.display));
+			const details = document.createElement("details");
+			details.dataset.key = a + "|" + ns;
+			const summary = document.createElement("summary");
+			summary.innerHTML = `<span class="ns"></span><span class="count"></span>`;
+			summary.firstChild.textContent = ns || "(global)";
+			summary.lastChild.textContent = list.length;
+			details.append(summary);
+			// Items are built on first open: thousands of rows nobody expanded are not worth the DOM.
+			details.addEventListener("toggle", () => {
+				if (details.open && details.childElementCount === 1)
+					details.append(...list.map((t) => typeItem(t, false)));
+			});
+			frag.append(details);
+		}
+	}
+	$("tree").replaceChildren(frag);
+	if (state.shown) markCurrent(state.shown);
+}
+
+function typeItem(t, withWhere) {
+	const a = document.createElement("a");
+	a.className = "item";
+	a.href = t.href;
+	a.dataset.key = t.a + "|" + t.name;
+	const kind = document.createElement("span");
+	kind.className = "kind";
+	kind.textContent = KIND_LETTER[t.kind];
+	kind.title = t.kind;
+	const name = document.createElement("span");
+	name.className = "name";
+	name.textContent = t.display;
+	a.append(kind, name);
+	if (withWhere) {
+		const where = document.createElement("span");
+		where.className = "where";
+		where.textContent = t.ns;
+		a.append(where);
+	}
+	return a;
+}
+
+function memberItem(m) {
+	const a = document.createElement("a");
+	a.className = "item";
+	a.href = m.href;
+	const kind = document.createElement("span");
+	kind.className = "kind " + (m.kind === "method" ? "m" : "f");
+	kind.textContent = KIND_LETTER[m.kind];
+	kind.title = m.kind;
+	const name = document.createElement("span");
+	name.className = "name";
+	name.textContent = m.display;
+	const where = document.createElement("span");
+	where.className = "where";
+	where.textContent = m.owner;
+	a.append(kind, name, where);
+	return a;
+}
+
+function markCurrent(shown) {
+	for (const el of document.querySelectorAll('#tree [aria-current="page"]'))
+		el.removeAttribute("aria-current");
+	if (!shown || !state.listing) return;
+	const t = state.listing.byName.get(shown.a + "|" + shown.t);
+	if (!t) return;
+	const details = document.querySelector(`#tree details[data-key="${CSS.escape(t.a + "|" + t.ns)}"]`);
+	if (!details) return;
+	if (!details.open) details.open = true;
+	if (details.childElementCount === 1) details.dispatchEvent(new Event("toggle"));
+	const item = details.querySelector(`[data-key="${CSS.escape(t.a + "|" + t.name)}"]`);
+	if (item) {
+		item.setAttribute("aria-current", "page");
+		if ($("results").hidden) item.scrollIntoView({ block: "center" });
+	}
+}
+
+// ---- Search ---------------------------------------------------------------------------------
+
+const MAX_RESULTS = 100;
+let results = [];
+let active = -1;
+
+function score(item, q, dotted) {
+	const s = dotted ? item.fullLower : item.lower;
+	if (s === q) return 0;
+	if (s.startsWith(q)) return 1;
+	if (dotted ? s.endsWith(q) : false) return 1;
+	return s.includes(q) ? 2 : -1;
+}
+
+function runSearch() {
+	const q = $("search").value.trim().toLowerCase();
+	if (!q || !state.listing) {
+		hideResults();
+		return;
+	}
+	const dotted = q.includes(".");
+	const scored = [];
+	for (const t of state.listing.types) {
+		const s = score(t, q, dotted);
+		if (s >= 0) scored.push([s, t.display.length, t, true]);
+	}
+	for (const m of state.listing.members) {
+		const s = score(m, q, dotted);
+		if (s >= 0) scored.push([s + 0.5, m.display.length, m, false]);
+	}
+	scored.sort((x, y) => x[0] - y[0] || x[1] - y[1]);
+	results = scored.slice(0, MAX_RESULTS);
+	const box = $("results");
+	const frag = document.createDocumentFragment();
+	results.forEach(([, , item, isType], i) => {
+		const el = isType ? typeItem(item, true) : memberItem(item);
+		el.id = "result-" + i;
+		el.setAttribute("role", "option");
+		frag.append(el);
+	});
+	if (!results.length) {
+		const none = document.createElement("div");
+		none.className = "side-note";
+		none.textContent = `Nothing matches “${$("search").value.trim()}”.`;
+		frag.append(none);
+	} else if (scored.length > MAX_RESULTS) {
+		const more = document.createElement("div");
+		more.className = "results-more";
+		more.textContent = `${MAX_RESULTS} of ${scored.length.toLocaleString()}`;
+		frag.append(more);
+	}
+	box.replaceChildren(frag);
+	box.hidden = false;
+	$("tree").hidden = true;
+	$("search").setAttribute("aria-expanded", "true");
+	setActive(results.length ? 0 : -1);
+	$("side-scroll").scrollTop = 0;
+}
+
+function hideResults() {
+	results = [];
+	active = -1;
+	$("results").hidden = true;
+	$("results").replaceChildren();
+	$("tree").hidden = false;
+	$("search").setAttribute("aria-expanded", "false");
+	$("search").removeAttribute("aria-activedescendant");
+}
+
+function setActive(i) {
+	$("results").querySelector(".active")?.classList.remove("active");
+	active = i;
+	if (i < 0) {
+		$("search").removeAttribute("aria-activedescendant");
+		return;
+	}
+	const el = $("result-" + i);
+	el.classList.add("active");
+	el.scrollIntoView({ block: "nearest" });
+	$("search").setAttribute("aria-activedescendant", el.id);
+}
+
+let searchFrame = 0;
+$("search").addEventListener("input", () => {
+	cancelAnimationFrame(searchFrame);
+	searchFrame = requestAnimationFrame(runSearch);
+});
+$("search").addEventListener("keydown", (e) => {
+	if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+		if (!results.length) return;
+		e.preventDefault();
+		const step = e.key === "ArrowDown" ? 1 : -1;
+		setActive((active + step + results.length) % results.length);
+	} else if (e.key === "Enter") {
+		if (active < 0) return;
+		e.preventDefault();
+		$("result-" + active).click();
+	} else if (e.key === "Escape") {
+		e.preventDefault();
+		if ($("search").value) {
+			$("search").value = "";
+			hideResults();
+		} else if (phone.matches) {
+			closeSheet();
+		} else {
+			$("search").blur();
+		}
+	}
+});
+$("sidebar").addEventListener("click", (e) => {
+	if (e.target.closest("a.item") && phone.matches)
+		closeSheet();
+});
+
+// ---- Viewer ---------------------------------------------------------------------------------
+
+function showViewerNote(message, { error = false, action, onAction } = {}) {
+	$("viewer-head").hidden = true;
+	$("code-scroll").hidden = true;
+	const note = $("viewer-note");
+	note.hidden = false;
+	const inner = document.createElement("div");
+	const p = document.createElement("p");
+	p.textContent = message;
+	if (error) p.className = "error";
+	inner.append(p);
+	if (action) {
+		const b = document.createElement("button");
+		b.className = "button small";
+		b.style.marginTop = "1rem";
+		b.textContent = action;
+		b.addEventListener("click", onAction);
+		inner.append(b);
+	}
+	note.replaceChildren(inner);
+}
+
+async function showType(v, a, t, m, seqHere) {
+	const key = `${v}|${a}|${t}`;
+	const info = state.listing.byName.get(a + "|" + t);
+	const { ns, display } = splitTypeName(t);
+	state.shown = { v, a, t };
+	markCurrent(state.shown);
+	document.title = `${display} · ${v} · vssrc`;
+	$("type-name").textContent = display;
+	$("type-ns").textContent = ns ? `${ns} · ${a}` : a;
+	$("viewer-head").hidden = false;
+	if (!info) {
+		$("view-status").replaceChildren();
+		$("code-scroll").hidden = true;
+		showViewerNote(`${t} is not in ${a} ${v}.`, { error: true });
+		$("viewer-head").hidden = false;
+		return;
+	}
+
+	let html = state.cache.get(key);
+	if (html === undefined) {
+		$("code-scroll").hidden = true;
+		const started = performance.now();
+		const status = $("view-status");
+		const renderTick = () => status.replaceChildren(dot("warn"), text(`Decompiling · ${((performance.now() - started) / 1000).toFixed(1)} s`));
+		renderTick();
+		const tick = setInterval(renderTick, 100);
+		showViewerNoteKeepHead();
+		try {
+			html = await call("decompile", { version: v, assembly: a, type: t });
+		} catch (err) {
+			clearInterval(tick);
+			if (seqHere !== routeSeq) return;
+			status.replaceChildren();
+			showViewerNote(`Decompiling ${t} failed: ${err.message}`, { error: true });
+			$("viewer-head").hidden = false;
+			return;
+		}
+		clearInterval(tick);
+		state.cache.set(key, html);
+		// Keep a few dozen types; decompiled text of the large ones runs to megabytes.
+		if (state.cache.size > 40)
+			state.cache.delete(state.cache.keys().next().value);
+		if (seqHere !== routeSeq) return;
+		status.replaceChildren(text(`${((performance.now() - started) / 1000).toFixed(1)} s`));
+	} else {
+		$("view-status").replaceChildren();
+	}
+	if (seqHere !== routeSeq) return;
+
+	const code = $("code");
+	if (code.dataset.key !== key) {
+		code.innerHTML = html;
+		code.dataset.key = key;
+	}
+	$("viewer-note").hidden = true;
+	$("code-scroll").hidden = false;
+	code.querySelector(".target")?.classList.remove("target");
+	const target = m && code.querySelector("#d" + CSS.escape(m));
+	if (target) {
+		target.classList.add("target");
+		target.scrollIntoView({ block: "center", inline: "nearest" });
+	} else {
+		$("code-scroll").scrollTo(0, 0);
+	}
+}
+
+function showViewerNoteKeepHead() {
+	const note = $("viewer-note");
+	note.hidden = false;
+	note.replaceChildren();
+}
+
+// ---- Phone sheet ----------------------------------------------------------------------------
+
+const SHEET_IN = [{ transform: "translateX(-100%)" }, { transform: "none" }];
+
+function openSheet(animate = true) {
+	const s = $("sidebar");
+	if (s.classList.contains("open")) return;
+	s.classList.add("open");
+	$("types-button").setAttribute("aria-expanded", "true");
+	if (animate && !reducedMotion.matches)
+		s.animate(SHEET_IN, { duration: 180, easing: "ease-out" });
+}
+
+async function closeSheet() {
+	const s = $("sidebar");
+	if (!s.classList.contains("open") || s.dataset.closing) return;
+	s.dataset.closing = "1";
+	$("types-button").setAttribute("aria-expanded", "false");
+	if (!reducedMotion.matches)
+		await s.animate([...SHEET_IN].reverse(), { duration: 160, easing: "ease-in" }).finished.catch(() => {});
+	s.classList.remove("open");
+	delete s.dataset.closing;
+}
+
+$("types-button").addEventListener("click", () => {
+	if ($("sidebar").classList.contains("open")) closeSheet();
+	else openSheet();
+});
+phone.addEventListener("change", () => {
+	if (!phone.matches) $("sidebar").classList.remove("open");
+	else if (!state.shown) openSheet(false);
+});
+
+// ---- Screens --------------------------------------------------------------------------------
+
+function showStart() {
+	$("browser").hidden = true;
+	$("version-button").hidden = true;
+	$("types-button").hidden = true;
+	$("start").hidden = false;
+	$("import-home").append($("import"));
+	document.title = "vssrc";
+}
+
+function showBrowser() {
+	$("start").hidden = true;
+	$("browser").hidden = false;
+	$("version-button").hidden = false;
+	$("types-button").hidden = false;
+}
+
+// ---- Versions dialog ------------------------------------------------------------------------
+
+const dialog = $("versions-dialog");
+let pendingDelete = null;
+
+function renderVersions() {
+	const list = $("version-list");
+	list.replaceChildren();
+	if (!state.versions.length) {
+		const li = document.createElement("li");
+		li.className = "muted";
+		li.textContent = "No versions imported yet.";
+		list.append(li);
+		return;
+	}
+	for (const r of [...state.versions].sort((a, b) => b.version.localeCompare(a.version, undefined, { numeric: true }))) {
+		const li = document.createElement("li");
+		li.className = "version-row" + (r.version === state.version ? " current" : "");
+		const v = document.createElement("span");
+		v.className = "v";
+		v.textContent = r.version;
+		const meta = document.createElement("span");
+		meta.className = "meta";
+		meta.textContent = `${mb(r.size)} MB · ${new Date(r.imported).toLocaleDateString()}`;
+		const actions = document.createElement("span");
+		actions.className = "actions";
+		if (pendingDelete === r.version) {
+			const label = document.createElement("span");
+			label.className = "confirm";
+			label.textContent = "Delete?";
+			const yes = button("Delete", "button small danger", () => deleteVersion(r.version));
+			const no = button("Cancel", "button small", () => {
+				pendingDelete = null;
+				renderVersions();
+				list.querySelector(`[data-v="${CSS.escape(r.version)}"]`)?.focus();
+			});
+			actions.append(label, yes, no);
+			queueMicrotask(() => no.focus());
+		} else {
+			if (r.version !== state.version)
+				actions.append(button("Open", "button small", () => {
+					closeDialog();
+					location.hash = hashFor({ v: r.version });
+				}));
+			const del = button("Delete", "button small danger", () => {
+				pendingDelete = r.version;
+				renderVersions();
+			});
+			del.dataset.v = r.version;
+			actions.append(del);
+		}
+		li.append(v, meta, actions);
+		list.append(li);
+	}
+}
+
+function button(label, cls, onClick) {
+	const b = document.createElement("button");
+	b.className = cls;
+	b.textContent = label;
+	b.addEventListener("click", onClick);
+	return b;
+}
+
+async function deleteVersion(v) {
+	pendingDelete = null;
+	try {
+		await call("delete", { version: v });
+	} catch (err) {
+		showImportError("Deleting failed: " + err.message);
+	}
+	for (const key of state.cache.keys())
+		if (key.startsWith(v + "|")) state.cache.delete(key);
+	if (state.version === v) {
+		state.version = null;
+		state.listing = null;
+		state.listingPromise = null;
+		state.shown = null;
+		$("code").dataset.key = "";
+	}
+	await refreshVersions();
+	renderStorage();
+	if (!state.versions.length) {
+		await closeDialog();
+		history.replaceState(null, "", location.pathname + location.search);
+		route();
+	} else if (parseHash().v === v) {
+		history.replaceState(null, "", hashFor({ v: preferredVersion() }));
+		route();
+	}
+}
+
+async function renderStorage() {
+	const el = $("storage-status");
+	if (!navigator.storage?.estimate) {
+		el.hidden = true;
+		return;
+	}
+	const [persisted, estimate] = await Promise.all([navigator.storage.persisted?.() ?? false, navigator.storage.estimate()]);
+	el.replaceChildren(dot(persisted ? "ok" : "hollow"), text(`${persisted ? "Persistent" : "Not persistent"} · ${mb(estimate.usage ?? 0)} MB used`));
+	el.title = persisted ? "" : "The browser may evict imported versions under storage pressure";
+}
+
+const DIALOG_IN = [{ opacity: 0, transform: "translateY(0.5rem) scale(0.98)" }, { opacity: 1, transform: "none" }];
+const FADE_IN = [{ opacity: 0 }, { opacity: 1 }];
+
+function openVersions() {
+	if (dialog.open) return;
+	$("import-dialog").append($("import"));
+	pendingDelete = null;
+	renderVersions();
+	renderStorage();
+	dialog.showModal();
+	if (!reducedMotion.matches) {
+		dialog.animate(DIALOG_IN, { duration: 180, easing: "ease-out" });
+		dialog.animate(FADE_IN, { duration: 180, easing: "ease-out", pseudoElement: "::backdrop" });
+	}
+}
+
+async function closeDialog() {
+	if (!dialog.open || dialog.dataset.closing) return;
+	if (importing) return;
+	dialog.dataset.closing = "1";
+	if (!reducedMotion.matches) {
+		const options = { duration: 140, easing: "ease-in", fill: "forwards" };
+		const out = dialog.animate([...DIALOG_IN].reverse(), options);
+		const backdrop = dialog.animate([...FADE_IN].reverse(), { ...options, pseudoElement: "::backdrop" });
+		await out.finished.catch(() => {});
+		dialog.close();
+		out.cancel();
+		backdrop.cancel();
+	} else {
+		dialog.close();
+	}
+	delete dialog.dataset.closing;
+	$("version-button").focus();
+}
+
+$("version-button").addEventListener("click", openVersions);
+$("versions-close").addEventListener("click", closeDialog);
+dialog.addEventListener("cancel", (e) => {
+	e.preventDefault();
+	closeDialog();
+});
+dialog.addEventListener("click", (e) => {
+	if (e.target === dialog) closeDialog();
+});
+
+// ---- Import ---------------------------------------------------------------------------------
+
+$("import-home").append($("import-template").content.cloneNode(true));
+$("download-link").href = `https://cdn.vintagestory.at/gamefiles/stable/vs_client_linux-x64_${LATEST.version}.tar.gz`;
+$("download-file").textContent = `vs_client_linux-x64_${LATEST.version}.tar.gz`;
+$("download-size").textContent = LATEST.size;
+
+let importing = false;
+
+function showImportError(message) {
+	const el = $("import-error");
+	el.textContent = message;
+	el.hidden = !message;
+}
+
+async function startImport(file) {
+	if (importing || !file) return;
+	if (unsupported) return;
+	// Inside the file pick (a user gesture), where browsers that prompt for it allow the prompt.
+	navigator.storage?.persist?.().catch(() => {});
+	importing = true;
+	showImportError("");
+	$("choose-button").setAttribute("aria-disabled", "true");
+	$("import-progress").hidden = false;
+	const fill = $("import-fill");
+	const label = $("import-text");
+	fill.classList.remove("indeterminate");
+	fill.style.width = "0";
+	label.textContent = "Reading";
+	onProgress = (p) => {
+		if (p.phase === "read") {
+			fill.style.width = (100 * p.read / p.total).toFixed(1) + "%";
+			label.textContent = `Reading ${mb(p.read)} / ${mb(p.total)} MB`;
+		} else {
+			fill.classList.add("indeterminate");
+			label.textContent = p.phase === "resolve"
+				? runtimeState === "ready" ? "Resolving references" : "Waiting for the decompiler"
+				: "Saving";
+		}
+	};
+	try {
+		const version = await call("import", { file });
+		importing = false;
+		await refreshVersions();
+		if (state.version === version) {
+			// Re-imported the open version: drop what was built from the old files.
+			state.version = null;
+			state.listingPromise = null;
+			for (const key of state.cache.keys())
+				if (key.startsWith(version + "|")) state.cache.delete(key);
+			$("code").dataset.key = "";
+		}
+		await closeDialog();
+		const target = hashFor({ v: version });
+		if (location.hash === target) route();
+		else location.hash = target;
+	} catch (err) {
+		showImportError(err.message);
+	} finally {
+		importing = false;
+		onProgress = null;
+		$("choose-button").removeAttribute("aria-disabled");
+		$("import-progress").hidden = true;
+		$("file-input").value = "";
+	}
+}
+
+$("file-input").addEventListener("change", (e) => startImport(e.target.files[0]));
+$("choose-button").addEventListener("keydown", (e) => {
+	if (e.key === "Enter" || e.key === " ") {
+		e.preventDefault();
+		$("file-input").click();
+	}
+});
+for (const type of ["dragenter", "dragover"])
+	document.addEventListener(type, (e) => {
+		if (!e.dataTransfer?.types?.includes("Files")) return;
+		e.preventDefault();
+		$("import").classList.add("dragging");
+	});
+document.addEventListener("dragleave", (e) => {
+	if (!e.relatedTarget) $("import").classList.remove("dragging");
+});
+document.addEventListener("drop", (e) => {
+	if (!e.dataTransfer?.files?.length) return;
+	e.preventDefault();
+	$("import").classList.remove("dragging");
+	if (!$("browser").hidden && !dialog.open) openVersions();
+	startImport(e.dataTransfer.files[0]);
+});
+
+// ---- Keyboard -------------------------------------------------------------------------------
+
+document.addEventListener("keydown", (e) => {
+	if (e.defaultPrevented || dialog.open) return;
+	const typing = e.target.closest?.("input, textarea, select, [contenteditable]");
+	const searchKey = (e.key === "/" && !typing && !e.ctrlKey && !e.metaKey && !e.altKey)
+		|| (e.key.toLowerCase() === "k" && (e.ctrlKey || e.metaKey));
+	if (searchKey && !$("browser").hidden) {
+		e.preventDefault();
+		if (phone.matches) openSheet();
+		$("search").focus();
+		$("search").select();
+	} else if (e.key === "Escape" && phone.matches && $("sidebar").classList.contains("open") && state.shown) {
+		closeSheet();
+	}
+});
+
+// ---- Start ----------------------------------------------------------------------------------
+
+(async () => {
+	if (unsupported) {
+		$("runtime-status").hidden = true;
+		showStart();
+		showImportError("This browser lacks DecompressionStream, WebAssembly or IndexedDB. Use Safari 16.4+, Chrome 80+ or Firefox 113+.");
+		$("choose-button").setAttribute("aria-disabled", "true");
+		return;
+	}
+	startWorker().then(
+		() => setRuntime("ready"),
+		(err) => setRuntime("error", err.message),
+	);
+	try {
+		await refreshVersions();
+	} catch (err) {
+		showStart();
+		showImportError("Storage is unavailable: " + err.message);
+		return;
+	}
+	route();
+})();
+</script>
+</body>
+</html>

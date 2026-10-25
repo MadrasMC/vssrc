@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk.WebAssembly">
+
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<OutputType>Exe</OutputType>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+		<InvariantGlobalization>true</InvariantGlobalization>
+		<UseSystemResourceKeys>true</UseSystemResourceKeys>
+		<WasmFingerprintAssets>false</WasmFingerprintAssets>
+		<WasmEnableWebcil>true</WasmEnableWebcil>
+		<!-- The page loads every file itself from one inlined bundle; no ICU, no debug symbols. -->
+		<DebuggerSupport>false</DebuggerSupport>
+		<WasmEmitSymbolMap>false</WasmEmitSymbolMap>
+		<CopyOutputSymbolsToPublishDirectory>false</CopyOutputSymbolsToPublishDirectory>
+		<GenerateDocumentationFile>false</GenerateDocumentationFile>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<SupportedPlatform Include="browser" />
+		<PackageReference Include="ICSharpCode.Decompiler" Version="11.1.0.9782" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<!-- The decompiler builds visitors and settings reflectively in places; trimming it is not worth the risk. -->
+		<TrimmerRootAssembly Include="ICSharpCode.Decompiler" />
+	</ItemGroup>
+
+</Project>
