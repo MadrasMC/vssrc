@@ -56,6 +56,14 @@ const worker = readFileSync(join(root, "src", "worker.js"), "utf8");
 if (worker.includes("</script"))
 	throw new Error("worker.js must not contain </script");
 
+// CodeMirror is the one npm dependency; Bun bundles it into a classic script (see src/editor.js).
+const editorOut = join(root, "node_modules", ".vssrc", "editor.js");
+execFileSync(process.platform === "win32" ? "bun.exe" : "bun",
+	["build", join(root, "src", "editor.js"), "--minify", "--format=iife", "--target=browser", "--outfile", editorOut],
+	{ cwd: root, stdio: ["ignore", "ignore", "inherit"] });
+// "<\/script" means the same inside JS strings, regexes and comments, and can't end the inline tag.
+const editor = readFileSync(editorOut, "utf8").replaceAll("</script", "<\\/script");
+
 let html = readFileSync(join(root, "src", "index.html"), "utf8");
 const replace = (token, value) => {
 	if (!html.includes(token))
@@ -65,6 +73,7 @@ const replace = (token, value) => {
 replace("{{GEIST}}", font("geist-latin.woff2"));
 replace("{{GEIST_MONO}}", font("geist-mono-latin.woff2"));
 replace("{{WORKER}}", worker);
+replace("{{EDITOR}}", editor);
 replace("{{BUNDLE}}", bundle.toString("base64"));
 
 mkdirSync(join(root, "dist"), { recursive: true });

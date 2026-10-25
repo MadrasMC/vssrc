@@ -33,6 +33,9 @@
 	--mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 	--bar: 3.25rem;
 	--side: clamp(17rem, 22vw, 24rem);
+	--code-size: 0.8125rem;
+	--gutter-min: 3.5rem;
+	--gutter-pad: 1rem;
 
 	color-scheme: light;
 	--bg: #f6f6f3;
@@ -48,6 +51,9 @@
 	--ok: #2e7d32;
 	--warn: #9a6200;
 	--target: #fbefb8;
+	--active-line: #f7f7f3;
+	--selection: #cfe1f7;
+	--match: #e6eee0;
 	--backdrop: rgb(20 20 18 / 0.32);
 
 	--sx-k: #8a35a6;
@@ -75,6 +81,9 @@
 		--ok: #82c592;
 		--warn: #e2b45e;
 		--target: #3b3520;
+		--active-line: #1c1d1a;
+		--selection: #2d3f55;
+		--match: #283225;
 		--backdrop: rgb(0 0 0 / 0.55);
 
 		--sx-k: #d0a0f2;
@@ -102,6 +111,9 @@
 	--ok: #82c592;
 	--warn: #e2b45e;
 	--target: #3b3520;
+	--active-line: #1c1d1a;
+	--selection: #2d3f55;
+	--match: #283225;
 	--backdrop: rgb(0 0 0 / 0.55);
 
 	--sx-k: #d0a0f2;
@@ -235,6 +247,8 @@ kbd {
 	font-weight: 600;
 	margin: 0 0 2rem;
 }
+.start-link { margin: -1.25rem 0 2rem; color: var(--muted); font-size: 0.9375rem; }
+.start-link .mono { color: var(--text); }
 .steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 1rem; }
 .steps li {
 	display: grid;
@@ -390,46 +404,54 @@ summary .count { font-size: 0.75rem; color: var(--faint); font-variant-numeric: 
 .results-more { padding: 0.5rem 1rem; font-size: 0.75rem; color: var(--faint); }
 
 #viewer { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
-.viewer-head {
+/* Editor chrome: a tab strip with the open file, a breadcrumb, then the CodeMirror view. */
+.tabs {
 	flex: none;
 	display: flex;
-	align-items: baseline;
-	flex-wrap: wrap;
-	gap: 0.25rem 0.75rem;
-	padding: 0.875rem 1.25rem;
+	align-items: stretch;
+	height: 2.5rem;
+	background: var(--bg);
 	border-bottom: 1px solid var(--line);
-	min-height: 3.5rem;
+	min-width: 0;
 }
-.viewer-head h1 {
-	font: 600 1.25rem/1.25 var(--mono);
-	letter-spacing: -0.02em;
+.tab {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	padding: 0 1rem;
+	margin-bottom: -1px;
+	background: var(--panel);
+	border-right: 1px solid var(--line);
+	box-shadow: inset 0 2px 0 var(--text);
+	min-width: 0;
+}
+.tab svg { width: 0.875rem; height: 0.875rem; flex: none; color: var(--sx-t); }
+.tab h1 {
+	font: 500 0.8125rem/1 var(--mono);
 	margin: 0;
-	overflow-wrap: anywhere;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
-.viewer-head .ns { font: 0.8125rem/1.3 var(--mono); color: var(--muted); overflow-wrap: anywhere; }
-.viewer-head .status { margin-left: auto; }
-#code-scroll { flex: 1; overflow: auto; min-height: 0; background: var(--panel); }
-#code-scroll pre {
-	margin: 0;
-	padding: 1rem 1.25rem calc(3rem + env(safe-area-inset-bottom));
-	font: 0.8125rem/1.6 var(--mono);
-	tab-size: 4;
-	-moz-tab-size: 4;
-	white-space: pre;
-	width: max-content;
-	min-width: 100%;
+.tabs .status { margin-left: auto; padding: 0 1rem; }
+.crumbs {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 0.375rem;
+	min-height: 1.875rem;
+	padding: 0.25rem 1rem;
+	background: var(--panel);
+	border-bottom: 1px solid var(--line);
+	font: 0.75rem/1.3 var(--mono);
+	color: var(--muted);
+	overflow: hidden;
+	white-space: nowrap;
 }
-#code .k { color: var(--sx-k); }
-#code .t { color: var(--sx-t); }
-#code .m { color: var(--sx-m); }
-#code .f { color: var(--sx-f); }
-#code .s { color: var(--sx-s); }
-#code .n { color: var(--sx-n); }
-#code .c { color: var(--sx-c); font-style: italic; }
-#code .v { color: var(--sx-v); }
-#code a { text-decoration: none; }
-#code a:hover { text-decoration: underline; text-underline-offset: 0.2em; }
-#code .target { background: var(--target); border-radius: 0.1875rem; box-shadow: 0 0 0 0.1875rem var(--target); }
+.crumbs span { overflow: hidden; text-overflow: ellipsis; }
+.crumbs span:last-child { color: var(--text); flex: none; }
+.crumbs i { font-style: normal; color: var(--faint); flex: none; }
+#editor { flex: 1; min-height: 0; background: var(--panel); }
 .viewer-note {
 	flex: 1;
 	display: grid;
@@ -490,8 +512,7 @@ dialog .import .steps { gap: 0.75rem; }
 	}
 	#sidebar:not(.open) { display: none; }
 	.item, details > summary { min-height: 2.5rem; }
-	.viewer-head { padding: 0.75rem 1rem; }
-	#code-scroll pre { padding: 0.75rem 1rem calc(3rem + env(safe-area-inset-bottom)); font-size: 0.75rem; }
+	:root { --code-size: 0.75rem; --gutter-min: 2.25rem; --gutter-pad: 0.5rem; }
 	.drop-hint { display: none; }
 }
 
@@ -522,6 +543,7 @@ dialog .import .steps { gap: 0.75rem; }
 <main id="start" hidden>
 	<div class="start-inner">
 		<h1>Vintage Story source</h1>
+		<p class="start-link" id="start-link" hidden></p>
 		<div id="import-home"></div>
 	</div>
 </main>
@@ -539,14 +561,17 @@ dialog .import .steps { gap: 0.75rem; }
 			<div id="tree"></div>
 		</div>
 	</nav>
-	<section id="viewer" aria-live="polite">
-		<div class="viewer-head" id="viewer-head" hidden>
-			<h1 id="type-name"></h1>
-			<span class="ns" id="type-ns"></span>
-			<span class="status" id="view-status"></span>
+	<section id="viewer">
+		<div class="tabs" id="viewer-head" hidden>
+			<div class="tab">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>
+				<h1 id="type-name"></h1>
+			</div>
+			<span class="status" id="view-status" aria-live="polite"></span>
 		</div>
-		<div id="code-scroll" hidden><pre><code id="code"></code></pre></div>
-		<div class="viewer-note" id="viewer-note"></div>
+		<nav class="crumbs" id="crumbs" aria-label="Location" hidden></nav>
+		<div id="editor" hidden></div>
+		<div class="viewer-note" id="viewer-note" aria-live="polite"></div>
 	</section>
 </div>
 
@@ -604,6 +629,7 @@ dialog .import .steps { gap: 0.75rem; }
 
 <script type="text/plain" id="worker-src">{{WORKER}}</script>
 <script type="application/octet-stream" id="bundle">{{BUNDLE}}</script>
+<script>{{EDITOR}}</script>
 
 <script type="module">
 // The CDN sends no CORS headers, so the page cannot look up the latest version; bump this on release.
@@ -715,16 +741,20 @@ const state = {
 	cache: new Map(),
 };
 
+/** Hash route: v version, a assembly, t type, m member token, l line or line range ("12" or "12-30"). */
 function parseHash() {
 	const p = new URLSearchParams(location.hash.slice(1));
-	return { v: p.get("v"), a: p.get("a"), t: p.get("t"), m: p.get("m") };
+	const lines = /^(\d+)(?:-(\d+))?$/.exec(p.get("l") ?? "");
+	const l = lines ? [+lines[1], +(lines[2] ?? lines[1])] : null;
+	return { v: p.get("v"), a: p.get("a"), t: p.get("t"), m: p.get("m"), l };
 }
-function hashFor({ v, a, t, m }) {
+function hashFor({ v, a, t, m, l }) {
 	const p = new URLSearchParams();
 	p.set("v", v);
 	if (a) p.set("a", a);
 	if (t) p.set("t", t);
 	if (m) p.set("m", m);
+	if (l) p.set("l", l[0] === l[1] ? String(l[0]) : `${l[0]}-${l[1]}`);
 	return "#" + p.toString();
 }
 function preferredVersion() {
@@ -746,21 +776,23 @@ let routeSeq = 0;
 async function route() {
 	const seqHere = ++routeSeq;
 	const h = parseHash();
+	// A link into a version that isn't imported keeps its hash: once that version is imported,
+	// routing the same hash again opens what the link points at.
+	const missing = h.v && !state.versions.some((x) => x.version === h.v) ? h.v : null;
+	renderWanted(missing);
 	if (!state.versions.length) {
 		showStart();
 		return;
 	}
 	showBrowser();
-	if (!h.v || !state.versions.some((x) => x.version === h.v)) {
-		const v = preferredVersion();
-		if (h.v) {
-			// A link to a version that is not imported: say so instead of silently switching.
-			await loadVersion(v);
-			if (seqHere !== routeSeq) return;
-			showViewerNote(`${h.v} is not imported.`, { action: "Add version", onAction: openVersions });
-			return;
-		}
-		history.replaceState(null, "", hashFor({ v }));
+	if (missing) {
+		await loadVersion(preferredVersion());
+		if (seqHere !== routeSeq) return;
+		showViewerNote(`This link is for ${missing}, which isn't imported.`, { action: `Import ${missing}`, onAction: openVersions });
+		return;
+	}
+	if (!h.v) {
+		history.replaceState(null, "", hashFor({ v: preferredVersion() }));
 		return route();
 	}
 	await loadVersion(h.v);
@@ -773,7 +805,7 @@ async function route() {
 		if (phone.matches) openSheet(false);
 		return;
 	}
-	await showType(h.v, h.a, h.t, h.m, seqHere);
+	await showType(h.v, h.a, h.t, h.m, h.l, seqHere);
 }
 
 addEventListener("hashchange", route);
@@ -1093,9 +1125,32 @@ $("sidebar").addEventListener("click", (e) => {
 
 // ---- Viewer ---------------------------------------------------------------------------------
 
+let editor = null;
+/** "v|a|t" of the document in the editor. */
+let editorKey = null;
+/** Hash set by a line-number click; routing to it highlights without scrolling. */
+let lineClickHash = null;
+
+function getEditor() {
+	editor ??= vssrcEditor.create($("editor"), {
+		onLineClick(line, extend) {
+			const h = parseHash();
+			// Shift extends from the first line of the current range, like a text selection.
+			const anchor = extend && h.l ? h.l[0] : line;
+			lineClickHash = hashFor({ ...h, m: null, l: [Math.min(anchor, line), Math.max(anchor, line)] });
+			location.hash = lineClickHash;
+		},
+		onLink(href) {
+			location.hash = href;
+		},
+	});
+	return editor;
+}
+
 function showViewerNote(message, { error = false, action, onAction } = {}) {
 	$("viewer-head").hidden = true;
-	$("code-scroll").hidden = true;
+	$("crumbs").hidden = true;
+	$("editor").hidden = true;
 	const note = $("viewer-note");
 	note.hidden = false;
 	const inner = document.createElement("div");
@@ -1114,27 +1169,43 @@ function showViewerNote(message, { error = false, action, onAction } = {}) {
 	note.replaceChildren(inner);
 }
 
-async function showType(v, a, t, m, seqHere) {
+function showHead(a, ns, display) {
+	$("type-name").textContent = display + ".cs";
+	const parts = [a, ...(ns ? [ns] : []), display].map((s) => {
+		const span = document.createElement("span");
+		span.textContent = s;
+		return span;
+	});
+	const crumbs = [];
+	parts.forEach((p, i) => {
+		if (i) {
+			const sep = document.createElement("i");
+			sep.textContent = "›";
+			crumbs.push(sep);
+		}
+		crumbs.push(p);
+	});
+	$("crumbs").replaceChildren(...crumbs);
+	$("viewer-head").hidden = false;
+	$("crumbs").hidden = false;
+}
+
+async function showType(v, a, t, m, l, seqHere) {
 	const key = `${v}|${a}|${t}`;
 	const info = state.listing.byName.get(a + "|" + t);
 	const { ns, display } = splitTypeName(t);
 	state.shown = { v, a, t };
 	markCurrent(state.shown);
 	document.title = `${display} · ${v} · vssrc`;
-	$("type-name").textContent = display;
-	$("type-ns").textContent = ns ? `${ns} · ${a}` : a;
-	$("viewer-head").hidden = false;
 	if (!info) {
-		$("view-status").replaceChildren();
-		$("code-scroll").hidden = true;
 		showViewerNote(`${t} is not in ${a} ${v}.`, { error: true });
-		$("viewer-head").hidden = false;
 		return;
 	}
+	showHead(a, ns, display);
 
 	let html = state.cache.get(key);
 	if (html === undefined) {
-		$("code-scroll").hidden = true;
+		$("editor").hidden = true;
 		const started = performance.now();
 		const status = $("view-status");
 		const renderTick = () => status.replaceChildren(dot("warn"), text(`Decompiling · ${((performance.now() - started) / 1000).toFixed(1)} s`));
@@ -1148,7 +1219,7 @@ async function showType(v, a, t, m, seqHere) {
 			if (seqHere !== routeSeq) return;
 			status.replaceChildren();
 			showViewerNote(`Decompiling ${t} failed: ${err.message}`, { error: true });
-			$("viewer-head").hidden = false;
+			showHead(a, ns, display);
 			return;
 		}
 		clearInterval(tick);
@@ -1163,21 +1234,26 @@ async function showType(v, a, t, m, seqHere) {
 	}
 	if (seqHere !== routeSeq) return;
 
-	const code = $("code");
-	if (code.dataset.key !== key) {
-		code.innerHTML = html;
-		code.dataset.key = key;
-	}
+	// Shown before the document goes in, so CodeMirror can measure for scrolling.
 	$("viewer-note").hidden = true;
-	$("code-scroll").hidden = false;
-	code.querySelector(".target")?.classList.remove("target");
-	const target = m && code.querySelector("#d" + CSS.escape(m));
-	if (target) {
-		target.classList.add("target");
-		target.scrollIntoView({ block: "center", inline: "nearest" });
-	} else {
-		$("code-scroll").scrollTo(0, 0);
+	$("editor").hidden = false;
+	const ed = getEditor();
+	const changed = editorKey !== key;
+	if (changed) {
+		ed.show(html);
+		editorKey = key;
 	}
+	// A member link (m=) highlights its definition's line; a line permalink (l=) wins over it.
+	let range = l;
+	if (!range && m) {
+		const line = ed.lineOf(m);
+		if (line) range = [line, line];
+	}
+	const fromLineClick = location.hash === lineClickHash;
+	lineClickHash = null;
+	ed.link(range, !fromLineClick);
+	if (!range && changed)
+		ed.scrollTop();
 }
 
 function showViewerNoteKeepHead() {
@@ -1315,7 +1391,7 @@ async function deleteVersion(v) {
 		state.listing = null;
 		state.listingPromise = null;
 		state.shown = null;
-		$("code").dataset.key = "";
+		editorKey = null;
 	}
 	await refreshVersions();
 	renderStorage();
@@ -1388,9 +1464,24 @@ dialog.addEventListener("click", (e) => {
 // ---- Import ---------------------------------------------------------------------------------
 
 $("import-home").append($("import-template").content.cloneNode(true));
-$("download-link").href = `https://cdn.vintagestory.at/gamefiles/stable/vs_client_linux-x64_${LATEST.version}.tar.gz`;
-$("download-file").textContent = `vs_client_linux-x64_${LATEST.version}.tar.gz`;
-$("download-size").textContent = LATEST.size;
+
+/** Points the download step at the version a permalink asks for, or the latest when null. */
+function renderWanted(version) {
+	const v = version ?? LATEST.version;
+	// Pre-releases (1.22.0-rc.3) live under unstable/ on the CDN.
+	$("download-link").href = `https://cdn.vintagestory.at/gamefiles/${v.includes("-") ? "unstable" : "stable"}/vs_client_linux-x64_${v}.tar.gz`;
+	$("download-file").textContent = `vs_client_linux-x64_${v}.tar.gz`;
+	$("download-size").textContent = v === LATEST.version ? LATEST.size : "";
+	const link = $("start-link");
+	link.hidden = !version;
+	if (version) {
+		const mono = document.createElement("span");
+		mono.className = "mono";
+		mono.textContent = version;
+		link.replaceChildren(text("Import "), mono, text(" to open this link."));
+	}
+}
+renderWanted(null);
 
 let importing = false;
 
@@ -1435,10 +1526,11 @@ async function startImport(file) {
 			state.listingPromise = null;
 			for (const key of state.cache.keys())
 				if (key.startsWith(version + "|")) state.cache.delete(key);
-			$("code").dataset.key = "";
+			editorKey = null;
 		}
 		await closeDialog();
-		const target = hashFor({ v: version });
+		// The hash still holds a permalink into the version just imported: open it as is.
+		const target = parseHash().v === version ? location.hash : hashFor({ v: version });
 		if (location.hash === target) route();
 		else location.hash = target;
 	} catch (err) {
@@ -1480,7 +1572,8 @@ document.addEventListener("drop", (e) => {
 
 document.addEventListener("keydown", (e) => {
 	if (e.defaultPrevented || dialog.open) return;
-	const typing = e.target.closest?.("input, textarea, select, [contenteditable]");
+	// The code view is contenteditable only for its caret and selection; it takes no text.
+	const typing = e.target.closest?.("input, textarea, select, [contenteditable]:not(.cm-content)");
 	const searchKey = (e.key === "/" && !typing && !e.ctrlKey && !e.metaKey && !e.altKey)
 		|| (e.key.toLowerCase() === "k" && (e.ctrlKey || e.metaKey));
 	if (searchKey && !$("browser").hidden) {
