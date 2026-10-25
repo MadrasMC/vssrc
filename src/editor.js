@@ -118,6 +118,15 @@ const braceFolding = foldService.of((state, lineStart) => {
 	return null;
 });
 
+/** A caret pointing down when the block is open, right when folded. */
+function foldMarker(open) {
+	const span = document.createElement("span");
+	span.className = "cm-fold-marker" + (open ? "" : " cm-fold-closed");
+	span.title = open ? "Fold" : "Unfold";
+	span.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 6.25 8 9.75l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+	return span;
+}
+
 const theme = EditorView.theme({
 	"&": { height: "100%", backgroundColor: "var(--panel)", color: "var(--text)", fontSize: "var(--code-size)" },
 	"&.cm-focused": { outline: "none" },
@@ -127,7 +136,14 @@ const theme = EditorView.theme({
 	".cm-gutters": { backgroundColor: "var(--panel)", color: "var(--faint)", border: "none" },
 	".cm-lineNumbers .cm-gutterElement": { padding: "0 0.75rem 0 var(--gutter-pad)", minWidth: "var(--gutter-min)", cursor: "pointer", fontVariantNumeric: "tabular-nums" },
 	".cm-lineNumbers .cm-gutterElement:hover": { color: "var(--text)" },
-	".cm-foldGutter .cm-gutterElement": { width: "1rem", color: "var(--faint)", cursor: "pointer" },
+	".cm-foldGutter .cm-gutterElement": { width: "1rem", color: "var(--faint)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" },
+	".cm-fold-marker": { display: "flex", width: "1rem", height: "1rem", transition: "opacity 120ms ease-out" },
+	".cm-fold-marker svg": { width: "100%", height: "100%" },
+	".cm-fold-marker:hover": { color: "var(--text)" },
+	".cm-fold-closed svg": { transform: "rotate(-90deg)" },
+	// Like most editors, open-block markers appear while the pointer is over the gutter; folded ones always show.
+	".cm-gutters:not(:hover) .cm-fold-marker:not(.cm-fold-closed)": { opacity: "0" },
+	"@media (hover: none)": { ".cm-gutters:not(:hover) .cm-fold-marker:not(.cm-fold-closed)": { opacity: "1" } },
 	".cm-activeLine": { backgroundColor: "var(--active-line)" },
 	".cm-activeLineGutter": { backgroundColor: "transparent", color: "var(--muted)" },
 	".cm-linked": { backgroundColor: "var(--target)" },
@@ -178,7 +194,7 @@ function create(parent, { onLineClick, onLink }) {
 				},
 			},
 		}),
-		foldGutter({ openText: "⌄", closedText: "›" }),
+		foldGutter({ markerDOM: foldMarker }),
 		codeFolding(),
 		braceFolding,
 		highlightActiveLine(),
