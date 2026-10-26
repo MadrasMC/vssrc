@@ -91,12 +91,17 @@ const ops = {
 // ---- Runtime --------------------------------------------------------------------------------
 
 /**
- * The bundle is a gzipped blob of every runtime file plus the .NET reference pack:
- * u32 LE header length, JSON [{ name, size }], then the files back to back.
+ * The bundle (runtime.<hash>.bin next to the page) is a gzipped blob of every runtime file plus the
+ * .NET reference pack: u32 LE header length, JSON [{ name, size }], then the files back to back.
  */
-async function boot(base64) {
-	const packed = await (await fetch("data:application/octet-stream;base64," + base64)).blob();
-	const raw = new Uint8Array(await new Response(packed.stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer());
+async function boot(url) {
+	const response = await fetch(url);
+	if (!response.ok)
+		throw new Error(`Loading the decompiler failed (HTTP ${response.status})`);
+	let raw = new Uint8Array(await response.arrayBuffer());
+	// A server that adds Content-Encoding: gzip has already had the browser undo the compression.
+	if (raw[0] === 0x1f && raw[1] === 0x8b)
+		raw = new Uint8Array(await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer());
 	const headerLength = new DataView(raw.buffer).getUint32(0, true);
 	const header = JSON.parse(new TextDecoder().decode(raw.subarray(4, 4 + headerLength)));
 	const files = new Map();

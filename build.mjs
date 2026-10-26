@@ -1,8 +1,11 @@
-// Builds dist/vssrc.html: one self-contained page with the .NET runtime, the decompiler, the
-// .NET reference pack, the worker and the fonts inlined. Run with `node build.mjs` or `bun build.mjs`;
+// Builds dist/: index.html (page, styles, fonts, icons) plus the files it loads, each named by a
+// content hash so they can be cached forever: runtime.<hash>.bin (the .NET runtime, the decompiler
+// and the .NET reference pack, gzipped), worker.<hash>.js and editor.<hash>.js (CodeMirror).
+// dist/og.png is rendered separately from src/og.html. Run with `node build.mjs` or `bun build.mjs`;
 // pass --skip-dotnet to reuse the last publish.
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
@@ -31,8 +34,8 @@ for (const name of readdirSync(framework).sort()) {
 		continue;
 	let data = readFileSync(join(framework, name));
 	if (name.endsWith(".js")) {
-		// The runtime resolves its files against import.meta.url, which is an opaque blob: URL once
-		// inlined, and new URL(name, "blob:...") throws. Any hierarchical base works: the worker's
+		// The runtime resolves its files against import.meta.url, which is an opaque blob: URL once the
+		// worker imports it from the bundle, and new URL(name, "blob:...") throws. Any hierarchical base works: the worker's
 		// resource loader serves every file from the bundle, so nothing is fetched from this host.
 		const source = data.toString("utf8");
 		if (name === "dotnet.js" && !source.includes("import.meta.url"))
@@ -52,17 +55,28 @@ length.writeUInt32LE(header.length);
 const bundle = gzipSync(Buffer.concat([length, header, ...entries.map((e) => e.data)]), { level: 9 });
 
 const font = (file) => readFileSync(join(root, "src", "fonts", file)).toString("base64");
-const worker = readFileSync(join(root, "src", "worker.js"), "utf8");
-if (worker.includes("</script"))
-	throw new Error("worker.js must not contain </script");
+const worker = readFileSync(join(root, "src", "worker.js"));
 
 // CodeMirror is the one npm dependency; Bun bundles it into a classic script (see src/editor.js).
 const editorOut = join(root, "node_modules", ".vssrc", "editor.js");
 execFileSync(process.platform === "win32" ? "bun.exe" : "bun",
 	["build", join(root, "src", "editor.js"), "--minify", "--format=iife", "--target=browser", "--outfile", editorOut],
 	{ cwd: root, stdio: ["ignore", "ignore", "inherit"] });
-// "<\/script" means the same inside JS strings, regexes and comments, and can't end the inline tag.
-const editor = readFileSync(editorOut, "utf8").replaceAll("</script", "<\\/script");
+const editor = readFileSync(editorOut);
+
+const dist = join(root, "dist");
+mkdirSync(dist, { recursive: true });
+// Drop the previous build's hashed files (and the single-file page this layout replaced).
+for (const name of readdirSync(dist))
+	if (/^(runtime|worker|editor)\.[0-9a-f]{8}\.(bin|js)$/.test(name) || name === "vssrc.html")
+		rmSync(join(dist, name));
+/** Writes data to dist/<base>.<hash>.<ext> and returns that file name. */
+const emit = (base, ext, data) => {
+	const name = `${base}.${createHash("sha256").update(data).digest("hex").slice(0, 8)}.${ext}`;
+	writeFileSync(join(dist, name), data);
+	return name;
+};
+const files = { runtime: emit("runtime", "bin", bundle), worker: emit("worker", "js", worker), editor: emit("editor", "js", editor) };
 
 // Linux client downloads, hardcoded: api.vintagestory.at sends no CORS headers, so the page can't
 // fetch the list itself. Refresh with --update-versions; the page links newer releases elsewhere.
@@ -92,13 +106,9 @@ replace("{{ICON}}", "data:image/svg+xml," + icon);
 replace("{{TOUCH_ICON}}", "data:image/png;base64," + readFileSync(join(root, "src", "apple-touch-icon.png")).toString("base64"));
 replace("{{GEIST}}", font("geist-latin.woff2"));
 replace("{{GEIST_MONO}}", font("geist-mono-latin.woff2"));
-replace("{{WORKER}}", worker);
-replace("{{EDITOR}}", editor);
+replace("{{FILES}}", JSON.stringify(files));
 replace("{{VERSIONS}}", JSON.stringify(JSON.parse(readFileSync(versionsPath, "utf8"))));
-replace("{{BUNDLE}}", bundle.toString("base64"));
 
-mkdirSync(join(root, "dist"), { recursive: true });
-const out = join(root, "dist", "vssrc.html");
-writeFileSync(out, html);
-const mb = (n) => (n / 1048576).toFixed(2) + " MB";
-console.log(`${out}: ${mb(Buffer.byteLength(html))} (bundle ${mb(bundle.length)} gzip, ${entries.length} files, ref pack ${refVersion})`);
+writeFileSync(join(dist, "index.html"), html);
+const kb = (n) => (n / 1024).toFixed(0) + " KB";
+console.log(`${dist}: index.html ${kb(Buffer.byteLength(html))}, ${files.runtime} ${kb(bundle.length)} (${entries.length} files, ref pack ${refVersion}), ${files.worker} ${kb(worker.length)}, ${files.editor} ${kb(editor.length)}`);

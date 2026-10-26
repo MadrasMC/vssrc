@@ -704,11 +704,27 @@ dialog .import .steps { gap: 0.75rem; }
 	</div>
 </template>
 
-<script type="text/plain" id="worker-src">{{WORKER}}</script>
-<script type="application/octet-stream" id="bundle">{{BUNDLE}}</script>
-<script>{{EDITOR}}</script>
-
 <script type="module">
+// Files next to the page, named by content hash at build time (see build.mjs).
+const FILES = {{FILES}};
+// The page is served at /vssrc without a trailing slash, where relative URLs would resolve against
+// the site root; a last path segment without a dot is the page's folder.
+const ASSET_BASE = new URL(/\/[^/.]+$/.test(location.pathname) ? location.pathname + "/" : "./", location.href);
+const asset = (name) => new URL(name, ASSET_BASE).href;
+
+/** Loads CodeMirror (a classic script that sets globalThis.vssrcEditor) once, on first use. */
+let editorScript;
+function loadEditorScript() {
+	editorScript ??= new Promise((resolve, reject) => {
+		const script = document.createElement("script");
+		script.src = asset(FILES.editor);
+		script.onload = resolve;
+		script.onerror = () => reject(new Error("The code editor failed to load"));
+		document.head.append(script);
+	});
+	return editorScript;
+}
+
 // Linux client downloads from src/versions.json, newest first per branch. The API sends no CORS
 // headers, so the list is inlined at build time (node build.mjs --update-versions refreshes it).
 const VERSIONS = {{VERSIONS}};
@@ -764,8 +780,7 @@ function call(op, args = {}) {
 }
 
 function startWorker() {
-	const source = $("worker-src").textContent;
-	worker = new Worker(URL.createObjectURL(new Blob([source], { type: "text/javascript" })), { type: "module" });
+	worker = new Worker(asset(FILES.worker), { type: "module" });
 	worker.onmessage = ({ data }) => {
 		if (data.progress) {
 			onProgress?.(data.progress);
@@ -785,10 +800,7 @@ function startWorker() {
 			p.reject(new Error(e.message || "The decompiler worker crashed"));
 		pending.clear();
 	};
-	const bundle = $("bundle");
-	const text = bundle.textContent;
-	bundle.remove();
-	return call("init", { bundle: text });
+	return call("init", { bundle: asset(FILES.runtime) });
 }
 
 let runtimeState = "starting";
@@ -1346,6 +1358,13 @@ async function showType(v, a, t, m, l, seqHere) {
 		$("view-status").replaceChildren();
 	}
 	if (seqHere !== routeSeq) return;
+	try {
+		await loadEditorScript();
+	} catch (err) {
+		showViewerNote(err.message, { error: true });
+		return;
+	}
+	if (seqHere !== routeSeq) return;
 
 	// Shown before the document goes in, so CodeMirror can measure for scrolling.
 	$("viewer-note").hidden = true;
@@ -1765,6 +1784,8 @@ document.addEventListener("keydown", (e) => {
 		() => setRuntime("ready"),
 		(err) => setRuntime("error", err.message),
 	);
+	// Fetched now, while the runtime starts, so the first type opens without waiting on it.
+	loadEditorScript().catch(() => {});
 	try {
 		await refreshVersions();
 	} catch (err) {
