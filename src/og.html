@@ -1,0 +1,70 @@
+<!doctype html>
+<!--
+	Source of dist/og.png, the 1200×630 link preview. Render with headless Edge or Chrome from the project root:
+	msedge --headless=new --allow-file-access-from-files --hide-scrollbars --window-size=1200,630 --screenshot=dist/og.png src/og.html
+-->
+<html lang="en">
+<meta charset="utf-8">
+<title>vssrc preview</title>
+<style>
+@font-face { font-family: "Geist"; src: url(fonts/geist-latin.woff2) format("woff2"); font-weight: 100 900; }
+@font-face { font-family: "Geist Mono"; src: url(fonts/geist-mono-latin.woff2) format("woff2"); font-weight: 100 900; }
+:root {
+	--bg: #111210;
+	--panel: #171816;
+	--line: #2a2b28;
+	--text: #e6e6e0;
+	--muted: #9d9d95;
+	--faint: #6c6d67;
+	--target: #3b3520;
+	--sx-k: #d0a0f2;
+	--sx-t: #6fcadb;
+	--sx-f: #96b9f0;
+	--sx-n: #f2a382;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; width: 1200px; height: 630px; overflow: hidden; background: var(--bg); color: var(--text); }
+body { position: relative; font-family: "Geist", system-ui, sans-serif; }
+.mark { position: absolute; left: 80px; top: 80px; width: 96px; height: 96px; }
+.org {
+	position: absolute; left: 82px; top: 222px;
+	font-size: 28px; font-weight: 500; letter-spacing: 0.01em; color: var(--faint);
+}
+h1 {
+	position: absolute; left: 80px; top: 266px; margin: 0;
+	font-size: 92px; line-height: 1; font-weight: 600; letter-spacing: -0.035em;
+}
+p {
+	position: absolute; left: 80px; bottom: 80px; margin: 0;
+	font-size: 30px; line-height: 1.35; color: var(--muted); letter-spacing: -0.01em;
+}
+.editor {
+	position: absolute; left: 700px; top: 80px; width: 640px; height: 620px;
+	background: var(--panel); border: 1px solid var(--line); border-radius: 18px; overflow: hidden;
+	box-shadow: 0 30px 80px rgb(0 0 0 / 0.45);
+}
+.tabs { display: flex; height: 52px; background: var(--bg); border-bottom: 1px solid var(--line); }
+.tab {
+	display: flex; align-items: center; gap: 10px; padding: 0 22px; background: var(--panel);
+	border-right: 1px solid var(--line); box-shadow: inset 0 2px 0 var(--text); margin-bottom: -1px;
+	font: 500 18px "Geist Mono", monospace;
+}
+.tab svg { width: 18px; height: 18px; color: var(--sx-t); }
+pre { margin: 0; padding: 18px 0; font: 19px/1.8 "Geist Mono", monospace; font-variant-ligatures: none; }
+.l { display: flex; }
+.l::before { content: attr(data-n); width: 62px; padding-right: 20px; text-align: right; color: var(--faint); flex: none; }
+.l.hl { background: var(--target); }
+.l.hl::before { color: var(--text); }
+.k { color: var(--sx-k); } .t { color: var(--sx-t); } .f { color: var(--sx-f); font-weight: 600; } .n { color: var(--sx-n); }
+</style>
+<body>
+<img class="mark" src="icon.svg" alt="">
+<div class="org">MadrasMC</div>
+<h1>Vintage Story<br>source</h1>
+<p>Decompiled in your browser.</p>
+<div class="editor">
+	<div class="tabs"><div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>ClientMain.cs</div></div>
+<pre><span class="l" data-n="1"><span class="k">using</span>&nbsp;Vintagestory.API.Client;</span><span class="l" data-n="2"><span class="k">using</span>&nbsp;Vintagestory.API.Common;</span><span class="l" data-n="3"> </span><span class="l" data-n="4"><span class="k">namespace</span>&nbsp;Vintagestory.Client.NoObf;</span><span class="l" data-n="5"> </span><span class="l" data-n="6"><span class="k">public sealed class</span>&nbsp;<span class="t">ClientMain</span>&nbsp;:&nbsp;<span class="t">GameMain</span></span><span class="l" data-n="7">{</span><span class="l hl" data-n="8">&nbsp;&nbsp;&nbsp;&nbsp;<span class="k">public const int</span>&nbsp;<span class="f">millisecondsToTriggerNewFrame</span></span><span class="l" data-n="9"> </span><span class="l" data-n="10">&nbsp;&nbsp;&nbsp;&nbsp;<span class="k">public</span>&nbsp;<span class="t">GuiComposerManager</span>&nbsp;<span class="f">GuiComposers</span>;</span><span class="l" data-n="11"> </span><span class="l" data-n="12">&nbsp;&nbsp;&nbsp;&nbsp;<span class="k">public bool</span>&nbsp;<span class="f">clientPlayingFired</span>;</span><span class="l" data-n="13"> </span><span class="l" data-n="14">&nbsp;&nbsp;&nbsp;&nbsp;<span class="k">public</span>&nbsp;<span class="t">ParticleManager</span>&nbsp;<span class="f">particleManager</span>;</span></pre>
+</div>
+</body>
+</html>

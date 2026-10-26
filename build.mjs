@@ -86,6 +86,10 @@ const replace = (token, value) => {
 		throw new Error(`Missing ${token} in index.html`);
 	html = html.split(token).join(value);
 };
+// The favicon goes in as SVG text (smaller than base64); only the characters a data URI can't hold are escaped.
+const icon = readFileSync(join(root, "src", "icon.svg"), "utf8").trim().replace(/[#%<>"\n]/g, (c) => encodeURIComponent(c));
+replace("{{ICON}}", "data:image/svg+xml," + icon);
+replace("{{TOUCH_ICON}}", "data:image/png;base64," + readFileSync(join(root, "src", "apple-touch-icon.png")).toString("base64"));
 replace("{{GEIST}}", font("geist-latin.woff2"));
 replace("{{GEIST_MONO}}", font("geist-mono-latin.woff2"));
 replace("{{WORKER}}", worker);
