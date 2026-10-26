@@ -168,12 +168,12 @@ async function importTarball({ file }) {
 		}
 	} catch (err) {
 		if (err instanceof TypeError || /gzip|decompress|incorrect header/i.test(err.message))
-			throw new Error("Not a gzip file. Choose the vs_client_linux-x64 .tar.gz");
+			throw new Error("Not a gzip file. Choose the Linux tar.gz Archive (full): vs_client_linux-x64_….tar.gz");
 		throw err;
 	}
 
 	if (!candidates.has("vintagestorylib.dll"))
-		throw new Error("VintagestoryLib.dll is not in this archive. Choose the vs_client_linux-x64 .tar.gz");
+		throw new Error("VintagestoryLib.dll is not in this archive. Choose the Linux tar.gz Archive (full): vs_client_linux-x64_….tar.gz");
 
 	progress({ phase: "resolve" });
 	await ready;

@@ -280,6 +280,29 @@ kbd {
 	max-width: 100%;
 }
 .download:hover { background: var(--sunken); }
+.step-head { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.5rem; }
+.step-head .step-title { margin: 0; }
+.select { position: relative; display: inline-flex; flex: none; }
+.select select {
+	appearance: none;
+	-webkit-appearance: none;
+	height: 2.25rem;
+	/* Fits the longest version ("1.22.0-rc.10"); the native width also counts the group labels. */
+	width: 10rem;
+	padding: 0 2rem 0 0.625rem;
+	border: 1px solid var(--line);
+	border-radius: 0.5rem;
+	background: var(--panel);
+	color: var(--text);
+	font: 1rem/1 var(--mono); /* 16px keeps iOS Safari from zooming on focus */
+	font-variant-numeric: tabular-nums;
+	cursor: pointer;
+}
+.select select:hover { background-color: var(--sunken); }
+.select svg { position: absolute; right: 0.5rem; top: 50%; width: 1rem; height: 1rem; transform: translateY(-50%); pointer-events: none; color: var(--muted); }
+.newer { margin: 0.625rem 0 0; font-size: 0.8125rem; color: var(--muted); }
+.newer a { color: var(--text); text-underline-offset: 0.2em; }
+.newer strong { color: var(--text); font-weight: 500; }
 .download svg { width: 1.125rem; height: 1.125rem; flex: none; color: var(--muted); }
 .download .file { font: 0.8125rem/1.3 var(--mono); overflow-wrap: anywhere; }
 .download .size { font-size: 0.75rem; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -470,7 +493,8 @@ dialog {
 	background: var(--panel);
 	color: var(--text);
 	padding: 0;
-	width: min(32rem, calc(100vw - 2rem));
+	/* 36rem keeps the import step's "Newer than …" line on one line (it needs about 30rem). */
+	width: min(36rem, calc(100vw - 2rem));
 	max-height: calc(100dvh - 2rem);
 	overflow: auto;
 }
@@ -599,12 +623,19 @@ dialog .import .steps { gap: 0.75rem; }
 			<li>
 				<span class="step-n">1</span>
 				<div>
-					<p class="step-title">Download the Linux client</p>
+					<div class="step-head">
+						<p class="step-title">Download the Linux client</p>
+						<span class="select">
+							<select id="version-select" aria-label="Version"></select>
+							<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 6.25 8 9.75l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+						</span>
+					</div>
 					<a class="download" id="download-link" href="#">
 						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14"/></svg>
 						<span class="file" id="download-file"></span>
 						<span class="size" id="download-size"></span>
 					</a>
+					<p class="newer">Newer than <span class="mono" id="newest-version"></span>? On <a href="https://account.vintagestory.at/" target="_blank" rel="noopener">your account page</a>, download <strong>Linux tar.gz Archive (full)</strong>.</p>
 				</div>
 			</li>
 			<li>
@@ -632,8 +663,10 @@ dialog .import .steps { gap: 0.75rem; }
 <script>{{EDITOR}}</script>
 
 <script type="module">
-// The CDN sends no CORS headers, so the page cannot look up the latest version; bump this on release.
-const LATEST = { version: "1.22.7", size: "590.5 MB" };
+// Linux client downloads from src/versions.json, newest first per branch. The API sends no CORS
+// headers, so the list is inlined at build time (node build.mjs --update-versions refreshes it).
+const VERSIONS = {{VERSIONS}};
+const NEWEST = VERSIONS.find((d) => d.branch === "stable");
 
 const $ = (id) => document.getElementById(id);
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
@@ -1465,13 +1498,54 @@ dialog.addEventListener("click", (e) => {
 
 $("import-home").append($("import-template").content.cloneNode(true));
 
-/** Points the download step at the version a permalink asks for, or the latest when null. */
+/** A listed download, or a guessed one for a version newer than the list (a permalink can ask for one). */
+function downloadFor(version) {
+	return VERSIONS.find((d) => d.version === version) ?? {
+		version,
+		file: `vs_client_linux-x64_${version}.tar.gz`,
+		size: "",
+		// Pre-releases (1.22.0-rc.3) live under unstable/ on the CDN.
+		url: `https://cdn.vintagestory.at/gamefiles/${version.includes("-") ? "unstable" : "stable"}/vs_client_linux-x64_${version}.tar.gz`,
+	};
+}
+
+function renderDownload(version) {
+	const d = downloadFor(version);
+	const select = $("version-select");
+	select.querySelector("option[data-unlisted]")?.remove();
+	if (!VERSIONS.includes(d)) {
+		const option = new Option(d.version, d.version);
+		option.dataset.unlisted = "";
+		select.prepend(option);
+	}
+	select.value = d.version;
+	$("download-link").href = d.url;
+	$("download-file").textContent = d.file;
+	$("download-size").textContent = d.size;
+}
+
+function fillVersionSelect() {
+	const select = $("version-select");
+	for (const [branch, label] of [["stable", "Stable"], ["unstable", "Pre-release"]]) {
+		const group = document.createElement("optgroup");
+		group.label = label;
+		for (const d of VERSIONS)
+			if (d.branch === branch)
+				group.append(new Option(d.version, d.version));
+		select.append(group);
+	}
+	select.addEventListener("change", () => renderDownload(select.value));
+	$("newest-version").textContent = NEWEST.version;
+}
+
+let wanted;
+/** Points the download step at the version a permalink asks for, or the newest when null. */
 function renderWanted(version) {
-	const v = version ?? LATEST.version;
-	// Pre-releases (1.22.0-rc.3) live under unstable/ on the CDN.
-	$("download-link").href = `https://cdn.vintagestory.at/gamefiles/${v.includes("-") ? "unstable" : "stable"}/vs_client_linux-x64_${v}.tar.gz`;
-	$("download-file").textContent = `vs_client_linux-x64_${v}.tar.gz`;
-	$("download-size").textContent = v === LATEST.version ? LATEST.size : "";
+	// Only on a change, so routing doesn't undo a version picked by hand.
+	if (version === wanted)
+		return;
+	wanted = version;
+	renderDownload(version ?? NEWEST.version);
 	const link = $("start-link");
 	link.hidden = !version;
 	if (version) {
@@ -1481,6 +1555,7 @@ function renderWanted(version) {
 		link.replaceChildren(text("Import "), mono, text(" to open this link."));
 	}
 }
+fillVersionSelect();
 renderWanted(null);
 
 let importing = false;

@@ -64,6 +64,22 @@ execFileSync(process.platform === "win32" ? "bun.exe" : "bun",
 // "<\/script" means the same inside JS strings, regexes and comments, and can't end the inline tag.
 const editor = readFileSync(editorOut, "utf8").replaceAll("</script", "<\\/script");
 
+// Linux client downloads, hardcoded: api.vintagestory.at sends no CORS headers, so the page can't
+// fetch the list itself. Refresh with --update-versions; the page links newer releases elsewhere.
+const versionsPath = join(root, "src", "versions.json");
+if (process.argv.includes("--update-versions")) {
+	const versions = [];
+	for (const branch of ["stable", "unstable"]) {
+		const manifest = await (await fetch(`https://api.vintagestory.at/${branch}.json`)).json();
+		for (const [version, platforms] of Object.entries(manifest))
+			if (platforms.linux)
+				versions.push({ version, branch, file: platforms.linux.filename, size: platforms.linux.filesize, url: platforms.linux.urls.cdn });
+	}
+	versions.sort((a, b) => a.branch.localeCompare(b.branch) || b.version.localeCompare(a.version, undefined, { numeric: true }));
+	writeFileSync(versionsPath, JSON.stringify(versions, null, "\t") + "\n");
+	console.log(`${versionsPath}: ${versions.length} versions`);
+}
+
 let html = readFileSync(join(root, "src", "index.html"), "utf8");
 const replace = (token, value) => {
 	if (!html.includes(token))
@@ -74,6 +90,7 @@ replace("{{GEIST}}", font("geist-latin.woff2"));
 replace("{{GEIST_MONO}}", font("geist-mono-latin.woff2"));
 replace("{{WORKER}}", worker);
 replace("{{EDITOR}}", editor);
+replace("{{VERSIONS}}", JSON.stringify(JSON.parse(readFileSync(versionsPath, "utf8"))));
 replace("{{BUNDLE}}", bundle.toString("base64"));
 
 mkdirSync(join(root, "dist"), { recursive: true });
