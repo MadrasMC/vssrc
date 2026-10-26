@@ -9,6 +9,8 @@ let exports_;
 let ready;
 /** Version whose files are currently loaded into the runtime. */
 let openVersion = null;
+/** Lowercase simple names of the bundled .NET reference assemblies. */
+const frameworkNames = new Set();
 
 // addEventListener, never self.onmessage: with onmessage assigned, the .NET 10 runtime's
 // startup stalls after loading assemblies and never completes inside a worker.
@@ -123,8 +125,10 @@ async function boot(base64) {
 		.create();
 	exports_ = (await runtime.getAssemblyExports("Decompiler")).Exports;
 	for (const [name, data] of files)
-		if (name.startsWith("ref/"))
+		if (name.startsWith("ref/")) {
 			exports_.AddFile(name.slice(4), data, true);
+			frameworkNames.add(name.slice(4, -4).toLowerCase());
+		}
 }
 
 // ---- Import ---------------------------------------------------------------------------------
@@ -204,6 +208,14 @@ async function importTarball({ file }) {
 	const lib = info.get("vintagestorylib");
 	const version = lib.informational || info.get("vintagestoryapi")?.gameVersion || lib.fileVersion || lib.assemblyVersion;
 
+	// The server-only archive ships the same VintagestoryLib.dll and PDB but not Vintagestory.dll or
+	// client libraries such as OpenTK.Graphics. It is accepted; the record says so, and lists what
+	// the browsed assemblies reference but the archive lacks, so the page can warn.
+	const archive = info.has("vintagestory") ? "client" : "server";
+	const missing = [...new Set(BROWSED.map((n) => n.toLowerCase()).filter((n) => info.has(n)).flatMap((n) => info.get(n).refs))]
+		.filter((r) => !info.has(r.toLowerCase()) && !frameworkNames.has(r.toLowerCase()))
+		.sort();
+
 	const files = [];
 	for (const n of keep) {
 		const { file: c } = info.get(n);
@@ -215,6 +227,9 @@ async function importTarball({ file }) {
 	progress({ phase: "save" });
 	const db = await openDb();
 	const existing = await req(db.transaction("versions").objectStore("versions").get(version));
+	// Never replace a full import with a server-only one. Records from before archives were tracked are full.
+	if (existing && archive === "server" && (existing.archive ?? "client") === "client")
+		return { version, archive: "client", missing: existing.missing ?? [], kept: true };
 	const tx = db.transaction(["versions", "files"], "readwrite");
 	if (existing)
 		for (const f of existing.files)
@@ -226,6 +241,8 @@ async function importTarball({ file }) {
 		imported: Date.now(),
 		size: files.reduce((s, f) => s + f.size, 0),
 		files: files.map(({ name, size, role }) => ({ name, size, role })),
+		archive,
+		missing,
 	});
 	try {
 		await done(tx);
@@ -236,7 +253,7 @@ async function importTarball({ file }) {
 	}
 	if (openVersion === version)
 		openVersion = null;
-	return version;
+	return { version, archive, missing, kept: false };
 }
 
 /**
@@ -374,7 +391,8 @@ function openDb() {
 	dbPromise ??= new Promise((resolve, reject) => {
 		const r = indexedDB.open(DB_NAME, 1);
 		r.onupgradeneeded = () => {
-			// versions: { version, imported, size, files: [{ name, size, role }] }
+			// versions: { version, imported, size, files: [{ name, size, role }], archive: "client" | "server", missing: [assembly name] }
+			// (archive and missing are absent on records from before they were tracked: read as "client", [])
 			// files: ArrayBuffer keyed "<version>/<file name>"
 			r.result.createObjectStore("versions", { keyPath: "version" });
 			r.result.createObjectStore("files");

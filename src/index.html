@@ -516,6 +516,23 @@ dialog::backdrop { background: var(--backdrop); }
 .version-row.current { background: var(--sunken); }
 .version-row .v { font: 600 0.9375rem/1.2 var(--mono); }
 .version-row .meta { font-size: 0.75rem; color: var(--muted); font-variant-numeric: tabular-nums; flex: 1; }
+.version-row .partial { color: var(--warn); }
+.banner {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	padding: 0.5rem 0.5rem 0.5rem 1rem;
+	background: color-mix(in srgb, var(--warn) 10%, var(--panel));
+	border-bottom: 1px solid color-mix(in srgb, var(--warn) 30%, var(--line));
+	font-size: 0.8125rem;
+}
+.banner p { margin: 0; flex: 1; min-width: 0; }
+.banner .icon-button { min-width: 2.25rem; height: 2.25rem; }
+@media (max-width: 47.99rem) {
+	.banner { flex-wrap: wrap; }
+	.banner p { flex-basis: calc(100% - 3.5rem); }
+}
 .version-row .actions { display: flex; gap: 0.25rem; align-items: center; }
 .version-row .confirm { font-size: 0.8125rem; color: var(--danger); margin-right: 0.25rem; }
 .storage { padding: 0 1.25rem 1.25rem; }
@@ -553,6 +570,7 @@ dialog .import .steps { gap: 0.75rem; }
 	</button>
 	<a class="brand" href="#">vssrc</a>
 	<button class="chip" id="version-button" aria-haspopup="dialog" hidden>
+		<span class="dot warn" id="version-partial" hidden></span>
 		<span id="version-label"></span>
 		<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
 	</button>
@@ -586,6 +604,14 @@ dialog .import .steps { gap: 0.75rem; }
 		</div>
 	</nav>
 	<section id="viewer">
+		<div class="banner" id="partial-banner" role="status" hidden>
+			<span class="dot warn"></span>
+			<p id="partial-text"></p>
+			<button class="button small" id="partial-import">Import full archive</button>
+			<button class="icon-button" id="partial-close" aria-label="Dismiss">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+			</button>
+		</div>
 		<div class="tabs" id="viewer-head" hidden>
 			<div class="tab">
 				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>
@@ -800,7 +826,40 @@ function preferredVersion() {
 async function refreshVersions() {
 	state.versions = await call("versions");
 	renderVersions();
+	renderPartial();
 }
+
+// ---- Server-only imports --------------------------------------------------------------------
+
+const listFormat = new Intl.ListFormat("en", { type: "disjunction" });
+
+/** Says what a server-only import lacks, from the references its record could not resolve. */
+function partialText(record) {
+	const libs = (record.missing ?? []).filter((n) => n !== "Vintagestory");
+	return "Imported from the server-only archive: Vintagestory.dll is missing"
+		+ (libs.length ? `, and code using ${listFormat.format(libs)} is less readable.` : ".");
+}
+
+/** The open version's warning: a dot on the version chip always, the banner until dismissed. */
+function renderPartial() {
+	const record = state.versions.find((x) => x.version === state.version);
+	const partial = record?.archive === "server";
+	$("version-partial").hidden = !partial;
+	$("version-button").title = partial ? partialText(record) : "";
+	const dismissed = partial && store.get("vssrc.dismissed." + record.version) === "1";
+	$("partial-banner").hidden = !partial || dismissed;
+	if (partial)
+		$("partial-text").textContent = partialText(record);
+}
+
+$("partial-close").addEventListener("click", () => {
+	store.set("vssrc.dismissed." + state.version, "1");
+	renderPartial();
+});
+$("partial-import").addEventListener("click", () => {
+	openVersions();
+	renderDownload(state.version);
+});
 
 // ---- Routing --------------------------------------------------------------------------------
 
@@ -856,6 +915,7 @@ function loadVersion(v) {
 	$("tree").replaceChildren();
 	hideResults();
 	renderVersions();
+	renderPartial();
 	renderSideNote();
 	const started = performance.now();
 	const tick = setInterval(() => renderSideNote(performance.now() - started), 250);
@@ -1370,6 +1430,13 @@ function renderVersions() {
 		const meta = document.createElement("span");
 		meta.className = "meta";
 		meta.textContent = `${mb(r.size)} MB · ${new Date(r.imported).toLocaleDateString()}`;
+		if (r.archive === "server") {
+			const partial = document.createElement("span");
+			partial.className = "partial";
+			partial.textContent = " · server-only";
+			partial.title = partialText(r);
+			meta.append(partial);
+		}
 		const actions = document.createElement("span");
 		actions.className = "actions";
 		if (pendingDelete === r.version) {
@@ -1592,10 +1659,13 @@ async function startImport(file) {
 		}
 	};
 	try {
-		const version = await call("import", { file });
+		const { version, archive, kept } = await call("import", { file });
 		importing = false;
 		await refreshVersions();
-		if (state.version === version) {
+		// A fresh server-only import shows its warning again, even if an earlier one was dismissed.
+		if (archive === "server")
+			store.set("vssrc.dismissed." + version, "");
+		if (state.version === version && !kept) {
 			// Re-imported the open version: drop what was built from the old files.
 			state.version = null;
 			state.listingPromise = null;
