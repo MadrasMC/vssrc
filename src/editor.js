@@ -242,6 +242,16 @@ function create(parent, { onLineClick, onLink }) {
 				view.dispatch({ effects: EditorView.scrollIntoView(line.from, { y: "center" }) });
 			}
 		},
+		/** Everything needed to come back to this document as it was: text, folds, selection, scroll. */
+		save() {
+			return { state: view.state, scroll: view.scrollDOM.scrollTop, defs };
+		},
+		restore(saved) {
+			view.setState(saved.state);
+			defs = saved.defs;
+			// After the new state's first layout, or the scroll position lands on stale heights.
+			requestAnimationFrame(() => { view.scrollDOM.scrollTop = saved.scroll; });
+		},
 		lineOf(token) {
 			return defs.has(token) ? view.state.doc.lineAt(defs.get(token)).number : null;
 		},

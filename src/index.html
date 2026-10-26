@@ -459,26 +459,65 @@ summary .count { font-size: 0.75rem; color: var(--faint); font-variant-numeric: 
 	border-bottom: 1px solid var(--line);
 	min-width: 0;
 }
+.tab-list {
+	display: flex;
+	min-width: 0;
+	overflow-x: auto;
+	overscroll-behavior-x: contain;
+	scrollbar-width: none;
+}
+.tab-list::-webkit-scrollbar { display: none; }
 .tab {
+	flex: none;
 	display: flex;
 	align-items: center;
 	gap: 0.5rem;
-	padding: 0 1rem;
+	max-width: 18rem;
+	padding: 0 0.375rem 0 0.875rem;
+	border-right: 1px solid var(--line);
+	color: var(--muted);
+	cursor: pointer;
+	user-select: none;
+	outline-offset: -2px;
+}
+.tab:hover { color: var(--text); }
+.tab[aria-selected="true"] {
 	margin-bottom: -1px;
 	background: var(--panel);
-	border-right: 1px solid var(--line);
+	color: var(--text);
 	box-shadow: inset 0 2px 0 var(--text);
-	min-width: 0;
 }
-.tab svg { width: 0.875rem; height: 0.875rem; flex: none; color: var(--sx-t); }
-.tab h1 {
-	font: 500 0.8125rem/1 var(--mono);
-	margin: 0;
-	white-space: nowrap;
+.tab > svg { width: 0.875rem; height: 0.875rem; flex: none; color: var(--sx-t); }
+.tab-name { font: 500 0.8125rem/1 var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tab-hint { font: 0.75rem/1 var(--mono); color: var(--faint); white-space: nowrap; }
+.tab-close {
+	flex: none;
+	display: grid;
+	place-items: center;
+	width: 1.5rem;
+	height: 1.5rem;
+	padding: 0;
+	border: 0;
+	border-radius: 0.25rem;
+	background: none;
+	color: var(--muted);
+	cursor: pointer;
+	opacity: 0;
+}
+.tab-close svg { width: 0.875rem; height: 0.875rem; }
+.tab-close:hover { background: var(--sunken); color: var(--text); }
+/* The close button shows on the active tab, on hover and on focus; touch screens always show it. */
+.tab[aria-selected="true"] .tab-close, .tab:hover .tab-close, .tab:focus-visible .tab-close { opacity: 1; }
+@media (hover: none) { .tab-close { opacity: 1; } }
+.tabs .status { margin-left: auto; padding: 0 1rem; flex: none; }
+.visually-hidden {
+	position: absolute;
+	width: 1px;
+	height: 1px;
 	overflow: hidden;
-	text-overflow: ellipsis;
+	clip-path: inset(50%);
+	white-space: nowrap;
 }
-.tabs .status { margin-left: auto; padding: 0 1rem; }
 .crumbs {
 	flex: none;
 	display: flex;
@@ -576,6 +615,8 @@ dialog .import .steps { gap: 0.75rem; }
 	#sidebar:not(.open) { display: none; }
 	.item, details > summary { min-height: 2.5rem; }
 	:root { --code-size: 0.75rem; --gutter-min: 2.25rem; --gutter-pad: 0.5rem; }
+	/* The tab strip needs the width; the timing only shows while a decompile runs. */
+	.tabs .status:not(:has(.dot)) { display: none; }
 	.drop-hint { display: none; }
 }
 
@@ -636,12 +677,10 @@ dialog .import .steps { gap: 0.75rem; }
 			</button>
 		</div>
 		<div class="tabs" id="viewer-head" hidden>
-			<div class="tab">
-				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>
-				<h1 id="type-name"></h1>
-			</div>
+			<div class="tab-list" id="tab-list" role="tablist" aria-label="Open types"></div>
 			<span class="status" id="view-status" aria-live="polite"></span>
 		</div>
+		<h1 class="visually-hidden" id="type-name"></h1>
 		<nav class="crumbs" id="crumbs" aria-label="Location" hidden></nav>
 		<div id="editor" hidden></div>
 		<div class="viewer-note" id="viewer-note" aria-live="polite"></div>
@@ -741,6 +780,7 @@ const mb = (n) => (n / 1048576).toFixed(n < 10485760 ? 1 : 0);
 const store = {
 	get(key) { try { return localStorage.getItem(key); } catch { return null; } },
 	set(key, value) { try { localStorage.setItem(key, value); } catch {} },
+	remove(key) { try { localStorage.removeItem(key); } catch {} },
 };
 
 // ---- Theme ----------------------------------------------------------------------------------
@@ -926,13 +966,24 @@ async function route() {
 	await loadVersion(h.v);
 	if (seqHere !== routeSeq) return;
 	if (!state.listing) return;
+	loadTabs(h.v);
 	if (!h.t) {
+		// No type in the link: go back to the active tab, or the last one; the empty view only when none are open.
+		const tab = tabs.list.find((x) => tabKey(x) === tabs.active) ?? tabs.list.at(-1);
+		if (tab) {
+			tabSwitchHash = tab.hash;
+			history.replaceState(null, "", tab.hash);
+			return route();
+		}
+		renderTabs();
+		editorKey = null;
 		state.shown = null;
 		markCurrent(null);
 		showViewerNote("Pick a type from the list, or press / to search.");
 		if (phone.matches) openSheet(false);
 		return;
 	}
+	openTab(h.a, h.t, location.hash);
 	await showType(h.v, h.a, h.t, h.m, h.l, seqHere);
 }
 
@@ -1252,6 +1303,198 @@ $("sidebar").addEventListener("click", (e) => {
 		closeSheet();
 });
 
+// ---- Tabs -----------------------------------------------------------------------------------
+
+// Open tabs belong to a version and persist as "vssrc.tabs.<version>": { tabs: [{ a, t, hash }],
+// active: "a|t" }. Each tab keeps the hash it was last shown at (with its m= or l=), so going back
+// to it lands on the same lines. The URL hash itself always names the active tab.
+const tabs = { version: null, list: [], active: null };
+/** Editor snapshots ("v|a|t" -> save()) of open tabs, so switching back restores scroll and folds. */
+const tabStates = new Map();
+/** Hash set by switching tabs; routing to it restores the tab without scrolling to its lines. */
+let tabSwitchHash = null;
+const tabKey = (tab) => tab.a + "|" + tab.t;
+
+function loadTabs(v) {
+	if (tabs.version !== v) {
+		tabs.version = v;
+		tabStates.clear();
+	}
+	readTabs();
+}
+
+/**
+ * Storage is the source of truth: every change re-reads it first, so a page restored from the
+ * back/forward cache or a second window never writes back a stale list.
+ */
+function readTabs() {
+	let saved = null;
+	try { saved = JSON.parse(store.get("vssrc.tabs." + tabs.version) ?? "null"); } catch {}
+	tabs.list = Array.isArray(saved?.tabs) ? saved.tabs.filter((x) => x?.a && x?.t && x?.hash) : [];
+	tabs.active = tabs.list.some((x) => tabKey(x) === saved?.active) ? saved.active : null;
+}
+
+/** Re-reads storage, keeping the tab on screen in this window as its active one. */
+function readTabsKeepingShown() {
+	const shown = state.shown && state.shown.v === tabs.version ? state.shown.a + "|" + state.shown.t : null;
+	readTabs();
+	if (shown && tabs.list.some((x) => tabKey(x) === shown))
+		tabs.active = shown;
+}
+
+function refreshTabs() {
+	if (!tabs.version)
+		return;
+	readTabsKeepingShown();
+	renderTabs();
+}
+addEventListener("storage", (e) => {
+	if (e.key === "vssrc.tabs." + tabs.version)
+		refreshTabs();
+});
+addEventListener("pageshow", (e) => {
+	if (e.persisted)
+		refreshTabs();
+});
+
+function saveTabs() {
+	store.set("vssrc.tabs." + tabs.version, JSON.stringify({ tabs: tabs.list, active: tabs.active }));
+}
+
+/** Makes a|t the active tab, adding it right after the current one if it isn't open. */
+function openTab(a, t, hash) {
+	// Inserted next to the tab this window was showing, not whichever another window made active.
+	readTabsKeepingShown();
+	let tab = tabs.list.find((x) => x.a === a && x.t === t);
+	if (!tab) {
+		tab = { a, t, hash };
+		const at = tabs.list.findIndex((x) => tabKey(x) === tabs.active);
+		tabs.list.splice(at < 0 ? tabs.list.length : at + 1, 0, tab);
+	}
+	tab.hash = hash;
+	tabs.active = tabKey(tab);
+	saveTabs();
+	renderTabs();
+}
+
+function switchTab(key) {
+	const tab = tabs.list.find((x) => tabKey(x) === key);
+	if (!tab || key === tabs.active)
+		return;
+	tabSwitchHash = tab.hash;
+	location.hash = tab.hash;
+}
+
+function closeTab(key) {
+	readTabsKeepingShown();
+	const i = tabs.list.findIndex((x) => tabKey(x) === key);
+	if (i < 0)
+		return;
+	tabs.list.splice(i, 1);
+	tabStates.delete(tabs.version + "|" + key);
+	if (key !== tabs.active) {
+		saveTabs();
+		renderTabs();
+		return;
+	}
+	// The neighbour to the right takes over, like closing a tab in an editor; none left shows the empty view.
+	const next = tabs.list[i] ?? tabs.list[i - 1];
+	tabs.active = next ? tabKey(next) : null;
+	saveTabs();
+	renderTabs();
+	if (next) {
+		tabSwitchHash = next.hash;
+		location.hash = next.hash;
+	} else {
+		location.hash = hashFor({ v: tabs.version });
+	}
+}
+
+const FILE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>';
+const CLOSE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"/></svg>';
+
+function renderTabs() {
+	const list = $("tab-list");
+	const names = tabs.list.map((x) => splitTypeName(x.t));
+	const counts = new Map();
+	for (const n of names)
+		counts.set(n.display, (counts.get(n.display) ?? 0) + 1);
+	list.replaceChildren(...tabs.list.map((tab, i) => {
+		const { ns, display } = names[i];
+		const active = tabKey(tab) === tabs.active;
+		const el = document.createElement("div");
+		el.className = "tab";
+		el.setAttribute("role", "tab");
+		el.setAttribute("aria-selected", String(active));
+		el.tabIndex = active ? 0 : -1;
+		el.dataset.key = tabKey(tab);
+		el.title = (ns ? ns + "." : "") + display;
+		el.innerHTML = FILE_ICON + '<span class="tab-name"></span>';
+		el.querySelector(".tab-name").textContent = display + ".cs";
+		// Two open types with the same name get the last part of their namespace as a hint.
+		if (counts.get(display) > 1) {
+			const hint = document.createElement("span");
+			hint.className = "tab-hint";
+			hint.textContent = ns.split(".").pop() || "(global)";
+			el.append(hint);
+		}
+		const close = document.createElement("button");
+		close.className = "tab-close";
+		close.tabIndex = -1;
+		close.setAttribute("aria-label", `Close ${display}.cs`);
+		close.innerHTML = CLOSE_ICON;
+		el.append(close);
+		return el;
+	}));
+	$("viewer-head").hidden = tabs.list.length === 0;
+	list.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: "nearest", inline: "nearest" });
+}
+
+$("tab-list").addEventListener("click", (e) => {
+	const tab = e.target.closest(".tab");
+	if (!tab)
+		return;
+	if (e.target.closest(".tab-close"))
+		closeTab(tab.dataset.key);
+	else
+		switchTab(tab.dataset.key);
+});
+// Middle click closes; the mousedown is stopped so it doesn't start autoscroll.
+$("tab-list").addEventListener("mousedown", (e) => {
+	if (e.button === 1 && e.target.closest(".tab"))
+		e.preventDefault();
+});
+$("tab-list").addEventListener("auxclick", (e) => {
+	const tab = e.target.closest(".tab");
+	if (tab && e.button === 1)
+		closeTab(tab.dataset.key);
+});
+// Tablist keys: arrows/Home/End move focus, Enter/Space opens, Delete/Backspace closes.
+$("tab-list").addEventListener("keydown", (e) => {
+	const tab = e.target.closest(".tab");
+	if (!tab)
+		return;
+	const all = [...$("tab-list").querySelectorAll(".tab")];
+	const i = all.indexOf(tab);
+	const focusAt = (j) => {
+		const target = all[(j + all.length) % all.length];
+		for (const el of all)
+			el.tabIndex = el === target ? 0 : -1;
+		target.focus();
+	};
+	if (e.key === "ArrowRight") focusAt(i + 1);
+	else if (e.key === "ArrowLeft") focusAt(i - 1);
+	else if (e.key === "Home") focusAt(0);
+	else if (e.key === "End") focusAt(all.length - 1);
+	else if (e.key === "Enter" || e.key === " ") switchTab(tab.dataset.key);
+	else if (e.key === "Delete" || e.key === "Backspace") {
+		closeTab(tab.dataset.key);
+		const left = [...$("tab-list").querySelectorAll(".tab")];
+		(left[Math.min(i, left.length - 1)] ?? $("search")).focus();
+	} else return;
+	e.preventDefault();
+});
+
 // ---- Viewer ---------------------------------------------------------------------------------
 
 let editor = null;
@@ -1315,7 +1558,7 @@ function showHead(a, ns, display) {
 		crumbs.push(p);
 	});
 	$("crumbs").replaceChildren(...crumbs);
-	$("viewer-head").hidden = false;
+	$("viewer-head").hidden = tabs.list.length === 0;
 	$("crumbs").hidden = false;
 }
 
@@ -1327,13 +1570,16 @@ async function showType(v, a, t, m, l, seqHere) {
 	markCurrent(state.shown);
 	document.title = `${display} · ${v} · vssrc`;
 	if (!info) {
+		// The tab stays in the bar so it can be closed.
 		showViewerNote(`${t} is not in ${a} ${v}.`, { error: true });
+		showHead(a, ns, display);
 		return;
 	}
 	showHead(a, ns, display);
 
+	// A tab with a saved snapshot needs no decompile, even if its HTML has left the cache.
 	let html = state.cache.get(key);
-	if (html === undefined) {
+	if (html === undefined && !tabStates.has(key)) {
 		$("editor").hidden = true;
 		const started = performance.now();
 		const status = $("view-status");
@@ -1375,8 +1621,18 @@ async function showType(v, a, t, m, l, seqHere) {
 	$("editor").hidden = false;
 	const ed = getEditor();
 	const changed = editorKey !== key;
+	let restored = false;
 	if (changed) {
-		ed.show(html);
+		// Keep the outgoing tab's place while it stays open.
+		if (tabs.list.some((x) => tabs.version + "|" + tabKey(x) === editorKey))
+			tabStates.set(editorKey, ed.save());
+		const saved = tabStates.get(key);
+		if (saved) {
+			ed.restore(saved);
+			restored = true;
+		} else {
+			ed.show(html);
+		}
 		editorKey = key;
 	}
 	// A member link (m=) highlights its definition's line; a line permalink (l=) wins over it.
@@ -1385,10 +1641,13 @@ async function showType(v, a, t, m, l, seqHere) {
 		const line = ed.lineOf(m);
 		if (line) range = [line, line];
 	}
+	// Line clicks and tab switches keep the view where it is; links and permalinks scroll to their lines.
 	const fromLineClick = location.hash === lineClickHash;
+	const fromTabSwitch = location.hash === tabSwitchHash && restored;
 	lineClickHash = null;
-	ed.link(range, !fromLineClick);
-	if (!range && changed)
+	tabSwitchHash = null;
+	ed.link(range, !fromLineClick && !fromTabSwitch);
+	if (!range && changed && !restored)
 		ed.scrollTop();
 }
 
@@ -1529,6 +1788,14 @@ async function deleteVersion(v) {
 	}
 	for (const key of state.cache.keys())
 		if (key.startsWith(v + "|")) state.cache.delete(key);
+	store.remove("vssrc.tabs." + v);
+	if (tabs.version === v) {
+		tabs.version = null;
+		tabs.list = [];
+		tabs.active = null;
+		tabStates.clear();
+		renderTabs();
+	}
 	if (state.version === v) {
 		state.version = null;
 		state.listing = null;
@@ -1714,6 +1981,7 @@ async function startImport(file) {
 			state.listingPromise = null;
 			for (const key of state.cache.keys())
 				if (key.startsWith(version + "|")) state.cache.delete(key);
+			tabStates.clear();
 			editorKey = null;
 		}
 		await closeDialog();
