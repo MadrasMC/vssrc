@@ -3,14 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>vssrc</title>
+<title>vssrc: Vintage Story source, decompiled in your browser</title>
 <meta name="description" content="Browse decompiled Vintage Story source in your browser, straight from the Linux client archive.">
-<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#171816" media="(prefers-color-scheme: dark)">
-<meta name="apple-mobile-web-app-title" content="vssrc">
-<link rel="icon" type="image/svg+xml" href="{{ICON}}">
-<link rel="apple-touch-icon" href="{{TOUCH_ICON}}">
-<!-- og.png is deployed next to the page (rendered from src/og.html); scrapers need its absolute URL. -->
+<!-- Link-preview tags come first: some fetchers only parse the start of the head, and the inlined
+     icons below are several KB. og.png is deployed next to the page (rendered from src/og.html). -->
 <link rel="canonical" href="https://madrasmc.ftrs.im/vssrc">
 <meta property="og:url" content="https://madrasmc.ftrs.im/vssrc">
 <meta property="og:type" content="website">
@@ -22,6 +18,11 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="vssrc: the Vintage Story client's ClientMain class, decompiled, in a code editor">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#171816" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-title" content="vssrc">
+<link rel="icon" type="image/svg+xml" href="{{ICON}}">
+<link rel="apple-touch-icon" href="{{TOUCH_ICON}}">
 <script>
 	// Before first paint, so an explicit theme choice never flashes the system one.
 	try {
@@ -731,6 +732,8 @@ const VERSIONS = {{VERSIONS}};
 const NEWEST = VERSIONS.find((d) => d.branch === "stable");
 
 const $ = (id) => document.getElementById(id);
+/** The static <title>, which link previews and search results use; type pages replace it while open. */
+const PAGE_TITLE = document.title;
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
 const phone = matchMedia("(max-width: 47.99rem)");
 const mb = (n) => (n / 1048576).toFixed(n < 10485760 ? 1 : 0);
@@ -1435,7 +1438,7 @@ function showStart() {
 	$("types-button").hidden = true;
 	$("start").hidden = false;
 	$("import-home").append($("import"));
-	document.title = "vssrc";
+	document.title = PAGE_TITLE;
 }
 
 function showBrowser() {
