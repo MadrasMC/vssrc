@@ -7,13 +7,13 @@
 <meta name="description" content="Browse decompiled Vintage Story source in your browser, straight from the Linux client archive.">
 <!-- Link-preview tags come first: some fetchers only parse the start of the head, and the inlined
      icons below are several KB. og.png is deployed next to the page (rendered from src/og.html). -->
-<link rel="canonical" href="https://madrasmc.ftrs.im/vssrc">
-<meta property="og:url" content="https://madrasmc.ftrs.im/vssrc">
+<link rel="canonical" href="{{SITE}}">
+<meta property="og:url" content="{{SITE}}">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="vssrc">
 <meta property="og:title" content="vssrc: Vintage Story source">
 <meta property="og:description" content="Browse decompiled Vintage Story source in your browser.">
-<meta property="og:image" content="https://madrasmc.ftrs.im/vssrc/og.png">
+<meta property="og:image" content="{{SITE}}/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="vssrc: the Vintage Story client's ClientMain class, decompiled, in a code editor">
@@ -21,8 +21,10 @@
 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#171816" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-title" content="vssrc">
-<link rel="icon" type="image/svg+xml" href="{{ICON}}">
-<link rel="apple-touch-icon" href="{{TOUCH_ICON}}">
+<link rel="icon" type="image/svg+xml" href="{{BASE}}{{ICON}}">
+<link rel="apple-touch-icon" href="{{BASE}}{{TOUCH_ICON}}">
+<link rel="preload" href="{{BASE}}{{GEIST}}" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="{{BASE}}{{GEIST_MONO}}" as="font" type="font/woff2" crossorigin>
 <script>
 	// Before first paint, so an explicit theme choice never flashes the system one.
 	try {
@@ -34,13 +36,13 @@
 <style>
 @font-face {
 	font-family: "Geist";
-	src: url(data:font/woff2;base64,{{GEIST}}) format("woff2");
+	src: url({{BASE}}{{GEIST}}) format("woff2");
 	font-weight: 100 900;
 	font-display: swap;
 }
 @font-face {
 	font-family: "Geist Mono";
-	src: url(data:font/woff2;base64,{{GEIST_MONO}}) format("woff2");
+	src: url({{BASE}}{{GEIST_MONO}}) format("woff2");
 	font-weight: 100 900;
 	font-display: swap;
 }
@@ -709,9 +711,8 @@ dialog .import .steps { gap: 0.75rem; }
 // Files next to the page, named by content hash at build time (see build.mjs).
 const FILES = {{FILES}};
 // The page is served at /vssrc without a trailing slash, where relative URLs would resolve against
-// the site root; a last path segment without a dot is the page's folder.
-const ASSET_BASE = new URL(/\/[^/.]+$/.test(location.pathname) ? location.pathname + "/" : "./", location.href);
-const asset = (name) => new URL(name, ASSET_BASE).href;
+// the site root, so files are addressed from the deploy path the build fills in.
+const asset = (name) => new URL("{{BASE}}" + name, location.origin).href;
 
 /** Loads CodeMirror (a classic script that sets globalThis.vssrcEditor) once, on first use. */
 let editorScript;

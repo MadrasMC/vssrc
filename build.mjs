@@ -1,6 +1,7 @@
-// Builds dist/: index.html (page, styles, fonts, icons) plus the files it loads, each named by a
+// Builds dist/: index.html (page, styles, app script) plus the files it loads, each named by a
 // content hash so they can be cached forever: runtime.<hash>.bin (the .NET runtime, the decompiler
-// and the .NET reference pack, gzipped), worker.<hash>.js and editor.<hash>.js (CodeMirror).
+// and the .NET reference pack, gzipped), worker.<hash>.js, editor.<hash>.js (CodeMirror), the icons
+// and the two Geist fonts.
 // dist/og.png is rendered separately from src/og.html. Run with `node build.mjs` or `bun build.mjs`;
 // pass --skip-dotnet to reuse the last publish.
 import { execFileSync } from "node:child_process";
@@ -54,7 +55,11 @@ const length = Buffer.alloc(4);
 length.writeUInt32LE(header.length);
 const bundle = gzipSync(Buffer.concat([length, header, ...entries.map((e) => e.data)]), { level: 9 });
 
-const font = (file) => readFileSync(join(root, "src", "fonts", file)).toString("base64");
+// Where dist/ is deployed. The page lives at SITE with no trailing slash, so every file it loads is
+// addressed by absolute path from BASE; canonical, og:url and og:image are built from SITE too.
+const SITE = "https://madrasmc.ftrs.im/vssrc";
+const BASE = new URL(SITE).pathname.replace(/\/?$/, "/");
+
 const worker = readFileSync(join(root, "src", "worker.js"));
 
 // CodeMirror is the one npm dependency; Bun bundles it into a classic script (see src/editor.js).
@@ -68,7 +73,7 @@ const dist = join(root, "dist");
 mkdirSync(dist, { recursive: true });
 // Drop the previous build's hashed files (and the single-file page this layout replaced).
 for (const name of readdirSync(dist))
-	if (/^(runtime|worker|editor)\.[0-9a-f]{8}\.(bin|js)$/.test(name) || name === "vssrc.html")
+	if (/^(runtime|worker|editor|icon|apple-touch-icon|geist|geist-mono)\.[0-9a-f]{8}\.(bin|js|svg|png|woff2)$/.test(name) || name === "vssrc.html")
 		rmSync(join(dist, name));
 /** Writes data to dist/<base>.<hash>.<ext> and returns that file name. */
 const emit = (base, ext, data) => {
@@ -77,6 +82,11 @@ const emit = (base, ext, data) => {
 	return name;
 };
 const files = { runtime: emit("runtime", "bin", bundle), worker: emit("worker", "js", worker), editor: emit("editor", "js", editor) };
+const src = (path) => readFileSync(join(root, "src", path));
+const icon = emit("icon", "svg", src("icon.svg"));
+const touchIcon = emit("apple-touch-icon", "png", src("apple-touch-icon.png"));
+const geist = emit("geist", "woff2", src("fonts/geist-latin.woff2"));
+const geistMono = emit("geist-mono", "woff2", src("fonts/geist-mono-latin.woff2"));
 
 // Linux client downloads, hardcoded: api.vintagestory.at sends no CORS headers, so the page can't
 // fetch the list itself. Refresh with --update-versions; the page links newer releases elsewhere.
@@ -100,12 +110,12 @@ const replace = (token, value) => {
 		throw new Error(`Missing ${token} in index.html`);
 	html = html.split(token).join(value);
 };
-// The favicon goes in as SVG text (smaller than base64); only the characters a data URI can't hold are escaped.
-const icon = readFileSync(join(root, "src", "icon.svg"), "utf8").trim().replace(/[#%<>"\n]/g, (c) => encodeURIComponent(c));
-replace("{{ICON}}", "data:image/svg+xml," + icon);
-replace("{{TOUCH_ICON}}", "data:image/png;base64," + readFileSync(join(root, "src", "apple-touch-icon.png")).toString("base64"));
-replace("{{GEIST}}", font("geist-latin.woff2"));
-replace("{{GEIST_MONO}}", font("geist-mono-latin.woff2"));
+replace("{{SITE}}", SITE);
+replace("{{BASE}}", BASE);
+replace("{{ICON}}", icon);
+replace("{{TOUCH_ICON}}", touchIcon);
+replace("{{GEIST}}", geist);
+replace("{{GEIST_MONO}}", geistMono);
 replace("{{FILES}}", JSON.stringify(files));
 replace("{{VERSIONS}}", JSON.stringify(JSON.parse(readFileSync(versionsPath, "utf8"))));
 
