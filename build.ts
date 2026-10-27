@@ -9,6 +9,7 @@
 // bun run emit --update-versions    refresh src/versions.json from api.vintagestory.at first
 import { copyFileSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
+import { linuxDownloads, type Manifest } from "./src/versions.ts";
 
 // Where dist/ is deployed, used only for canonical, og:url and og:image: link-preview crawlers need
 // absolute URLs. Everything else in the page is relative.
@@ -67,21 +68,13 @@ const bundle = Bun.gzipSync(Buffer.concat([length, header, ...entries.map((e) =>
 
 // ---- Version list ---------------------------------------------------------------------------
 
-// Linux client downloads, hardcoded: api.vintagestory.at sends no CORS headers, so the page can't
-// fetch the list itself. The page links newer releases to the account page.
+// Linux client downloads, bundled into the page. api.vintagestory.at sends no CORS headers, so a
+// deployment that proxies its manifests next to the page (versions/{stable,unstable}.json) gets a
+// live list; everywhere else the page uses this one, refreshed with --update-versions.
 const versionsPath = join(src, "versions.json");
 if (Bun.argv.includes("--update-versions")) {
-	type Manifest = Record<string, Record<string, { filename: string; filesize: string; urls: { cdn: string } }>>;
-	const versions = [];
-	for (const branch of ["stable", "unstable"]) {
-		const manifest = await (await fetch(`https://api.vintagestory.at/${branch}.json`)).json() as Manifest;
-		for (const [version, platforms] of Object.entries(manifest)) {
-			const linux = platforms.linux;
-			if (linux)
-				versions.push({ version, branch, file: linux.filename, size: linux.filesize, url: linux.urls.cdn });
-		}
-	}
-	versions.sort((a, b) => a.branch.localeCompare(b.branch) || b.version.localeCompare(a.version, undefined, { numeric: true }));
+	const manifest = async (branch: string) => await (await fetch(`https://api.vintagestory.at/${branch}.json`)).json() as Manifest;
+	const versions = linuxDownloads({ stable: await manifest("stable"), unstable: await manifest("unstable") });
 	await Bun.write(versionsPath, JSON.stringify(versions, null, "\t") + "\n");
 	console.log(`${versionsPath}: ${versions.length} versions`);
 }

@@ -5,5 +5,5 @@
 		"lib": ["ESNext"],
 		"types": ["bun"]
 	},
-	"include": ["build.ts"]
+	"include": ["build.ts", "src/versions.ts"]
 }

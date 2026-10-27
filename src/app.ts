@@ -2,23 +2,15 @@
 // The decompiler runs in worker.ts; the code view (editor.ts) loads as a separate chunk.
 import type { CodeEditor, EditorSnapshot, LineRange } from "./editor.ts";
 import type { ImportResult, Op, Ops, Progress, Reply, VersionRecord } from "./protocol.ts";
+import { linuxDownloads, type Branch, type Download, type Manifest } from "./versions.ts";
 
-/** A Linux client download from src/versions.json. */
-interface Download {
-	version: string;
-	branch: "stable" | "unstable";
-	file: string;
-	size: string;
-	url: string;
-}
-
-// Filled in by build.ts (Bun's define): hashed file names next to the page, and the version list.
-// The API sends no CORS headers, so the list is inlined at build time (bun run emit --update-versions).
+// Filled in by build.ts (Bun's define): hashed file names next to the page, and the bundled version
+// list (src/versions.json). fetchLiveVersions() replaces the list where the deployment proxies the API.
 declare const BUILD_FILES: { runtime: string; worker: string };
 declare const BUILD_VERSIONS: Download[];
 const FILES = BUILD_FILES;
-const VERSIONS = BUILD_VERSIONS;
-const NEWEST = VERSIONS.find((d) => d.branch === "stable")!;
+let versions: Download[] = BUILD_VERSIONS;
+const newest = () => versions.find((d) => d.branch === "stable")!;
 
 // Every file sits next to the page, so the page's folder URL (served with a trailing slash) is the base.
 const asset = (name: string) => new URL(name, location.href).href;
@@ -248,8 +240,10 @@ $("partial-close").addEventListener("click", () => {
 });
 $("partial-import").addEventListener("click", () => {
 	openVersions();
-	if (state.version)
-		renderDownload(state.version);
+	if (state.version) {
+		picked = state.version;
+		renderDownload(picked);
+	}
 });
 
 // ---- Routing --------------------------------------------------------------------------------
@@ -1253,7 +1247,7 @@ $("import-home").append($<HTMLTemplateElement>("import-template").content.cloneN
 
 /** A listed download, or a guessed one for a version newer than the list (a permalink can ask for one). */
 function downloadFor(version: string): Download {
-	return VERSIONS.find((d) => d.version === version) ?? {
+	return versions.find((d) => d.version === version) ?? {
 		version,
 		branch: version.includes("-") ? "unstable" : "stable",
 		file: `vs_client_linux-x64_${version}.tar.gz`,
@@ -1267,7 +1261,7 @@ function renderDownload(version: string) {
 	const d = downloadFor(version);
 	const select = $<HTMLSelectElement>("version-select");
 	select.querySelector("option[data-unlisted]")?.remove();
-	if (!VERSIONS.includes(d)) {
+	if (!versions.includes(d)) {
 		const option = new Option(d.version, d.version);
 		option.dataset.unlisted = "";
 		select.prepend(option);
@@ -1278,28 +1272,38 @@ function renderDownload(version: string) {
 	$("download-size").textContent = d.size;
 }
 
-function fillVersionSelect() {
-	const select = $<HTMLSelectElement>("version-select");
-	for (const [branch, label] of [["stable", "Stable"], ["unstable", "Pre-release"]] as const) {
+function renderVersionSelect() {
+	const groups = ([["stable", "Stable"], ["unstable", "Pre-release"]] as const).map(([branch, label]) => {
 		const group = document.createElement("optgroup");
 		group.label = label;
-		for (const d of VERSIONS)
+		for (const d of versions)
 			if (d.branch === branch)
 				group.append(new Option(d.version, d.version));
-		select.append(group);
-	}
-	select.addEventListener("change", () => renderDownload(select.value));
-	$("newest-version").textContent = NEWEST.version;
+		return group;
+	});
+	$<HTMLSelectElement>("version-select").replaceChildren(...groups);
+	$("newest-version").textContent = newest().version;
 }
 
+/** The version a permalink asks for (null for none). */
 let wanted: string | null | undefined;
+/** A version chosen in the picker, which wins until the link's version changes. */
+let picked: string | null = null;
+const downloadShown = () => picked ?? wanted ?? newest().version;
+
+$<HTMLSelectElement>("version-select").addEventListener("change", (e) => {
+	picked = (e.currentTarget as HTMLSelectElement).value;
+	renderDownload(picked);
+});
+
 /** Points the download step at the version a permalink asks for, or the newest when null. */
 function renderWanted(version: string | null) {
 	// Only on a change, so routing doesn't undo a version picked by hand.
 	if (version === wanted)
 		return;
 	wanted = version;
-	renderDownload(version ?? NEWEST.version);
+	picked = null;
+	renderDownload(downloadShown());
 	const link = $("start-link");
 	link.hidden = !version;
 	if (version) {
@@ -1309,8 +1313,33 @@ function renderWanted(version: string | null) {
 		link.replaceChildren(text("Import "), mono, text(" to open this link."));
 	}
 }
-fillVersionSelect();
+renderVersionSelect();
 renderWanted(null);
+
+/**
+ * Swaps in the live version list where the deployment proxies api.vintagestory.at's manifests
+ * next to the page (versions/stable.json and versions/unstable.json; the API itself sends no CORS
+ * headers). Anywhere else the requests fail and the bundled list stays.
+ */
+async function fetchLiveVersions() {
+	const manifest = async (branch: Branch) => {
+		const response = await fetch(asset(`versions/${branch}.json`));
+		if (!response.ok)
+			throw new Error(`HTTP ${response.status}`);
+		return await response.json() as Manifest;
+	};
+	try {
+		const [stable, unstable] = await Promise.all([manifest("stable"), manifest("unstable")]);
+		const live = linuxDownloads({ stable, unstable });
+		if (!live.some((d) => d.branch === "stable"))
+			return;
+		versions = live;
+		renderVersionSelect();
+		renderDownload(downloadShown());
+	} catch {
+		// Not proxied here (another host, a local file, offline), or not JSON: the bundled list stays.
+	}
+}
 
 let importing = false;
 
@@ -1423,6 +1452,8 @@ document.addEventListener("keydown", (e) => {
 // ---- Start ----------------------------------------------------------------------------------
 
 (async () => {
+	// In the background: the picker shows the bundled list until (and unless) the live one arrives.
+	fetchLiveVersions();
 	if (unsupported) {
 		$("runtime-status").hidden = true;
 		showStart();

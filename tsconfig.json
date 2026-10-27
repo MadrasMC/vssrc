@@ -14,5 +14,5 @@
 		"allowImportingTsExtensions": true,
 		"skipLibCheck": true
 	},
-	"include": ["src/app.ts", "src/editor.ts", "src/protocol.ts"]
+	"include": ["src/app.ts", "src/editor.ts", "src/protocol.ts", "src/versions.ts"]
 }
