@@ -2,8 +2,8 @@
 // splits it into its own chunk that loads while the decompiler starts.
 import { EditorState, RangeSet, RangeValue, StateEffect, StateField, type Extension } from "@codemirror/state";
 import {
-	Decoration, EditorView, GutterMarker, drawSelection, gutterLineClass, highlightActiveLine,
-	highlightActiveLineGutter, keymap, lineNumbers, type DecorationSet,
+	Decoration, EditorView, GutterMarker, drawSelection, getDialog, gutterLineClass, highlightActiveLine,
+	highlightActiveLineGutter, keymap, lineNumbers, showDialog, type DecorationSet,
 } from "@codemirror/view";
 import { defaultKeymap } from "@codemirror/commands";
 import { codeFolding, foldGutter, foldKeymap, foldService } from "@codemirror/language";
@@ -170,8 +170,11 @@ const theme = EditorView.theme({
 	".cm-foldPlaceholder": { backgroundColor: "var(--sunken)", border: "1px solid var(--line)", color: "var(--muted)", padding: "0 0.375rem", margin: "0 0.25rem" },
 	".cm-panels": { backgroundColor: "var(--panel)", color: "var(--text)" },
 	".cm-panels-top": { borderBottom: "1px solid var(--line)" },
-	".cm-panel.cm-search": { padding: "0.5rem 0.75rem", fontFamily: "var(--font)", fontSize: "0.8125rem" },
-	".cm-panel.cm-search input, .cm-panel.cm-search button": { font: "inherit", borderRadius: "0.375rem" },
+	".cm-panel.cm-search, .cm-panel.cm-goto-line": { padding: "0.5rem 0.75rem", fontFamily: "var(--font)", fontSize: "0.8125rem" },
+	".cm-panel.cm-search input, .cm-panel.cm-search button, .cm-panel.cm-goto-line input, .cm-panel.cm-goto-line button": { font: "inherit", borderRadius: "0.375rem" },
+	".cm-panel.cm-goto-line label": { fontSize: "inherit" },
+	".cm-panel.cm-goto-line input": { width: "6rem", margin: "0 0.25rem" },
+	".cm-panel.cm-goto-line .cm-dialog-close": { top: "50%", right: "0.75rem", transform: "translateY(-50%)", fontSize: "1rem" },
 	".cm-textfield": { border: "1px solid var(--line)", backgroundColor: "var(--bg)", padding: "0.25rem 0.5rem", fontSize: "1rem" },
 	".cm-button": { backgroundImage: "none", backgroundColor: "var(--panel)", border: "1px solid var(--line)", padding: "0.25rem 0.625rem" },
 	".cm-tooltip": { backgroundColor: "var(--panel)", border: "1px solid var(--line)" },
@@ -200,10 +203,47 @@ export interface EditorEvents {
 	onLineClick(line: number, extend: boolean): void;
 	/** A plain click on a reference. */
 	onLink(href: string): void;
+	/** A line picked with Go to line. */
+	onGoToLine(line: number): void;
+}
+
+/** Opens a line number field above the code (or selects it if it's open) and reports the line picked. */
+function promptLine(view: EditorView, onGoToLine: (line: number) => void) {
+	const open = getDialog(view, "cm-goto-line");
+	if (open) {
+		open.dom.querySelector("input")?.select();
+		return true;
+	}
+	// Opened from outside the code, the caret may be far off screen (line 1 until a click). Move it to the
+	// top visible line, or handing focus back to the code on close would scroll to it.
+	if (!view.hasFocus) {
+		const top = view.scrollDOM.getBoundingClientRect().top - view.documentTop;
+		let block = view.lineBlockAtHeight(top);
+		// A partly hidden first line would still be scrolled to; take the next one.
+		if (block.top < top && block.to < view.state.doc.length)
+			block = view.lineBlockAt(block.to + 1);
+		view.dispatch({ selection: { anchor: block.from } });
+	}
+	const current = view.state.doc.lineAt(view.state.selection.main.head).number;
+	const { close, result } = showDialog(view, {
+		class: "cm-goto-line",
+		label: "Go to line",
+		input: { type: "text", name: "line", inputmode: "numeric", autocomplete: "off", value: String(current) },
+		submitLabel: "Go",
+		focus: true,
+		top: true,
+	});
+	result.then((form) => {
+		view.dispatch({ effects: close });
+		const line = Number(form?.querySelector("input")?.value.trim());
+		if (form && Number.isInteger(line) && line >= 1)
+			onGoToLine(Math.min(line, view.state.doc.lines));
+	});
+	return true;
 }
 
 /** A read-only code view filling parent. */
-export function create(parent: HTMLElement, { onLineClick, onLink }: EditorEvents) {
+export function create(parent: HTMLElement, { onLineClick, onLink, onGoToLine }: EditorEvents) {
 	const base: Extension[] = [
 		EditorState.readOnly.of(true),
 		EditorState.tabSize.of(4),
@@ -227,7 +267,8 @@ export function create(parent: HTMLElement, { onLineClick, onLink }: EditorEvent
 		drawSelection(),
 		highlightSelectionMatches(),
 		search({ top: true }),
-		keymap.of([...searchKeymap, ...foldKeymap, ...defaultKeymap]),
+		// Ctrl+G is go to line on every platform; find next stays on F3 (and ⌘G on Apple platforms).
+		keymap.of([{ key: "Ctrl-g", run: (view) => promptLine(view, onGoToLine) }, ...searchKeymap, ...foldKeymap, ...defaultKeymap]),
 		linkedField,
 		theme,
 		EditorView.domEventHandlers({
@@ -283,6 +324,9 @@ export function create(parent: HTMLElement, { onLineClick, onLink }: EditorEvent
 		},
 		scrollTop() {
 			view.dispatch({ effects: EditorView.scrollIntoView(0, { y: "start" }) });
+		},
+		goToLine() {
+			promptLine(view, onGoToLine);
 		},
 	};
 }

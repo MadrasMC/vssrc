@@ -28,6 +28,8 @@ function $<T extends HTMLElement = HTMLElement>(id: string): T {
 const PAGE_TITLE = document.title;
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
 const phone = matchMedia("(max-width: 47.99rem)");
+/** Apple platforms, where the Ctrl of most shortcuts is ⌘. */
+const mac = /Mac|iPhone|iPad/.test(navigator.platform);
 const mb = (n: number) => (n / 1048576).toFixed(n < 10485760 ? 1 : 0);
 const store = {
 	get(key: string) { try { return localStorage.getItem(key); } catch { return null; } },
@@ -739,6 +741,14 @@ function closeTab(key: string) {
 	}
 }
 
+/** Switches to the tab step places after the active one, wrapping around. */
+function stepTab(step: number) {
+	readTabsKeepingShown();
+	const i = tabs.list.findIndex((x) => tabKey(x) === tabs.active);
+	if (i >= 0)
+		switchTab(tabKey(tabs.list[(i + step + tabs.list.length) % tabs.list.length]!));
+}
+
 const FILE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>';
 const CLOSE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"/></svg>';
 
@@ -861,6 +871,15 @@ async function getEditor() {
 		onLink(href) {
 			location.hash = href;
 		},
+		onGoToLine(line) {
+			const h = parseHash();
+			if (!h.v)
+				return;
+			const target = hashFor({ ...h, v: h.v, m: null, l: [line, line] });
+			// Routing scrolls to the line, but an unchanged hash doesn't route.
+			if (location.hash === target) editor?.link([line, line], true);
+			else location.hash = target;
+		},
 	});
 	return editor;
 }
@@ -878,7 +897,7 @@ function showLanding() {
 }
 
 $("landing-search").addEventListener("click", () => {
-	if (phone.matches) openSheet();
+	revealSidebar();
 	$("search").focus();
 });
 $("landing-random").addEventListener("click", () => {
@@ -886,9 +905,10 @@ $("landing-random").addEventListener("click", () => {
 	if (top.length)
 		location.hash = top[Math.floor(Math.random() * top.length)]!.href;
 });
-// The find-in-file shortcut, as this platform writes it.
-if (/Mac|iPhone|iPad/.test(navigator.platform))
-	$("landing").querySelector(".f-f")!.parentElement!.querySelector("kbd")!.textContent = "⌘ F";
+// Shortcut keys as this platform writes them: on Apple platforms Ctrl is ⌘ in .mod keys and ⌃ elsewhere, Alt is ⌥.
+if (mac)
+	for (const kbd of document.querySelectorAll("kbd"))
+		kbd.textContent = kbd.textContent!.replace(/^Ctrl /, kbd.classList.contains("mod") ? "⌘ " : "⌃ ").replace(/^Alt /, "⌥ ");
 
 function showViewerNote(message: string, { error = false, action, onAction }: { error?: boolean; action?: string; onAction?: () => void } = {}) {
 	$("landing").hidden = true;
@@ -1054,12 +1074,37 @@ async function closeSheet() {
 	delete s.dataset.closing;
 }
 
-$("types-button").addEventListener("click", () => {
-	if ($("sidebar").classList.contains("open")) closeSheet();
+// ---- Sidebar --------------------------------------------------------------------------------
+
+// Wide screens can collapse the sidebar (Ctrl+B), remembered as "vssrc.sidebar"; phones show it as a sheet.
+const sidebarCollapsed = () => document.body.classList.contains("side-hidden");
+
+function setSidebarCollapsed(collapsed: boolean) {
+	document.body.classList.toggle("side-hidden", collapsed);
+	store.set("vssrc.sidebar", collapsed ? "hidden" : "shown");
+	if (!phone.matches)
+		$("types-button").setAttribute("aria-expanded", String(!collapsed));
+}
+
+function toggleSidebar() {
+	if (!phone.matches) setSidebarCollapsed(!sidebarCollapsed());
+	else if ($("sidebar").classList.contains("open")) closeSheet();
 	else openSheet();
-});
+}
+
+/** Shows the sidebar, as a sheet on phones. */
+function revealSidebar() {
+	if (phone.matches) openSheet();
+	else if (sidebarCollapsed()) setSidebarCollapsed(false);
+}
+
+if (store.get("vssrc.sidebar") === "hidden")
+	document.body.classList.add("side-hidden");
+$("types-button").setAttribute("aria-expanded", String(!phone.matches && !sidebarCollapsed()));
+$("types-button").addEventListener("click", toggleSidebar);
 phone.addEventListener("change", () => {
 	if (!phone.matches) $("sidebar").classList.remove("open");
+	$("types-button").setAttribute("aria-expanded", String(!phone.matches && !sidebarCollapsed()));
 });
 
 // ---- Screens --------------------------------------------------------------------------------
@@ -1201,35 +1246,45 @@ async function renderStorage() {
 const DIALOG_IN: Keyframe[] = [{ opacity: 0, transform: "translateY(0.5rem) scale(0.98)" }, { opacity: 1, transform: "none" }];
 const FADE_IN: Keyframe[] = [{ opacity: 0 }, { opacity: 1 }];
 
+/** Opens a modal dialog, animating it and its backdrop in. */
+function showModal(d: HTMLDialogElement) {
+	d.showModal();
+	if (!reducedMotion.matches) {
+		d.animate(DIALOG_IN, { duration: 180, easing: "ease-out" });
+		d.animate(FADE_IN, { duration: 180, easing: "ease-out", pseudoElement: "::backdrop" });
+	}
+}
+
+/** Animates a modal dialog and its backdrop out, then closes it. */
+async function hideModal(d: HTMLDialogElement) {
+	if (!d.open || d.dataset.closing) return;
+	d.dataset.closing = "1";
+	if (!reducedMotion.matches) {
+		const options: KeyframeAnimationOptions = { duration: 140, easing: "ease-in", fill: "forwards" };
+		const out = d.animate([...DIALOG_IN].reverse(), options);
+		const backdrop = d.animate([...FADE_IN].reverse(), { ...options, pseudoElement: "::backdrop" });
+		await out.finished.catch(() => {});
+		d.close();
+		out.cancel();
+		backdrop.cancel();
+	} else {
+		d.close();
+	}
+	delete d.dataset.closing;
+}
+
 function openVersions() {
 	if (dialog.open) return;
 	$("import-dialog").append($("import"));
 	pendingDelete = null;
 	renderVersions();
 	renderStorage();
-	dialog.showModal();
-	if (!reducedMotion.matches) {
-		dialog.animate(DIALOG_IN, { duration: 180, easing: "ease-out" });
-		dialog.animate(FADE_IN, { duration: 180, easing: "ease-out", pseudoElement: "::backdrop" });
-	}
+	showModal(dialog);
 }
 
 async function closeDialog() {
-	if (!dialog.open || dialog.dataset.closing) return;
-	if (importing) return;
-	dialog.dataset.closing = "1";
-	if (!reducedMotion.matches) {
-		const options: KeyframeAnimationOptions = { duration: 140, easing: "ease-in", fill: "forwards" };
-		const out = dialog.animate([...DIALOG_IN].reverse(), options);
-		const backdrop = dialog.animate([...FADE_IN].reverse(), { ...options, pseudoElement: "::backdrop" });
-		await out.finished.catch(() => {});
-		dialog.close();
-		out.cancel();
-		backdrop.cancel();
-	} else {
-		dialog.close();
-	}
-	delete dialog.dataset.closing;
+	if (!dialog.open || dialog.dataset.closing || importing) return;
+	await hideModal(dialog);
 	$("version-button").focus();
 }
 
@@ -1241,6 +1296,34 @@ dialog.addEventListener("cancel", (e) => {
 });
 dialog.addEventListener("click", (e) => {
 	if (e.target === dialog) closeDialog();
+});
+
+// ---- Shortcuts dialog -----------------------------------------------------------------------
+
+const shortcutsDialog = $<HTMLDialogElement>("shortcuts-dialog");
+/** Where focus goes back to on close: the button, or wherever ? was pressed. */
+let shortcutsOpener: HTMLElement | null = null;
+
+function openShortcuts() {
+	if (shortcutsDialog.open) return;
+	shortcutsOpener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+	showModal(shortcutsDialog);
+}
+
+async function closeShortcuts() {
+	if (!shortcutsDialog.open || shortcutsDialog.dataset.closing) return;
+	await hideModal(shortcutsDialog);
+	shortcutsOpener?.focus();
+}
+
+$("shortcuts-button").addEventListener("click", openShortcuts);
+$("shortcuts-close").addEventListener("click", closeShortcuts);
+shortcutsDialog.addEventListener("cancel", (e) => {
+	e.preventDefault();
+	closeShortcuts();
+});
+shortcutsDialog.addEventListener("click", (e) => {
+	if (e.target === shortcutsDialog) closeShortcuts();
 });
 
 // ---- Import ---------------------------------------------------------------------------------
@@ -1435,21 +1518,45 @@ document.addEventListener("drop", (e) => {
 
 // ---- Keyboard -------------------------------------------------------------------------------
 
+// The list is in the shortcuts dialog (index.html). Tab keys use Alt because browsers keep Ctrl+W,
+// Ctrl+Tab and Ctrl+PageUp/PageDown, and Alt+Left/Right are Back and Forward. Keys go by e.code where
+// Alt is held, since Option on Apple platforms turns e.key into another character.
 document.addEventListener("keydown", (e) => {
-	if (e.defaultPrevented || dialog.open) return;
+	if (e.defaultPrevented || document.querySelector("dialog[open]")) return;
 	// The code view is contenteditable only for its caret and selection; it takes no text.
 	const typing = e.target instanceof Element && e.target.closest("input, textarea, select, [contenteditable]:not(.cm-content)");
-	const searchKey = (e.key === "/" && !typing && !e.ctrlKey && !e.metaKey && !e.altKey)
-		|| (e.key.toLowerCase() === "k" && (e.ctrlKey || e.metaKey));
-	if (searchKey && !$("browser").hidden) {
-		e.preventDefault();
-		if (phone.matches) openSheet();
+	const plain = !e.ctrlKey && !e.metaKey && !e.altKey;
+	// Ctrl, or ⌘ on Apple platforms.
+	const mod = (mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey) && !e.altKey;
+	// Alt alone; AltGr arrives as Ctrl+Alt and types characters.
+	const alt = e.altKey && !e.ctrlKey && !e.metaKey;
+	const key = e.key.toLowerCase();
+	const browsing = !$("browser").hidden;
+	let handled = true;
+	if (browsing && ((e.key === "/" && plain && !typing) || (key === "k" && mod))) {
+		revealSidebar();
 		const search = $<HTMLInputElement>("search");
 		search.focus();
 		search.select();
+	} else if (browsing && key === "b" && mod) {
+		toggleSidebar();
+	} else if (key === "g" && e.ctrlKey && !e.metaKey && !e.altKey && editor && !$("editor").hidden) {
+		editor.goToLine();
+	} else if (browsing && alt && (e.code === "BracketLeft" || e.code === "BracketRight")) {
+		stepTab(e.code === "BracketLeft" ? -1 : 1);
+	} else if (browsing && alt && e.code === "KeyW") {
+		readTabsKeepingShown();
+		if (tabs.active) closeTab(tabs.active);
+	} else if (e.key === "?" && !e.ctrlKey && !e.metaKey && !typing) {
+		openShortcuts();
 	} else if (e.key === "Escape" && phone.matches && $("sidebar").classList.contains("open") && state.shown) {
 		closeSheet();
+		handled = false;
+	} else {
+		handled = false;
 	}
+	if (handled)
+		e.preventDefault();
 });
 
 // ---- Start ----------------------------------------------------------------------------------
