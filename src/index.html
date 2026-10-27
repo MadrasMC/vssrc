@@ -377,9 +377,14 @@ kbd {
 	border-radius: 0.5rem;
 	background: var(--bg);
 	font-size: 1rem; /* 16px keeps iOS Safari from zooming on focus */
-	outline: none;
 }
-.search input:focus-visible { border-color: var(--accent); outline: 2px solid color-mix(in srgb, var(--accent) 30%, transparent); outline-offset: 0; }
+/* Fields take a tight ring on their own border instead, so they don't look larger when focused.
+   After the field rules above, which would otherwise reset the border colour. */
+input:focus-visible, select:focus-visible {
+	border-color: var(--accent);
+	outline: 2px solid color-mix(in srgb, var(--accent) 30%, transparent);
+	outline-offset: 0;
+}
 .search input::-webkit-search-cancel-button { display: none; }
 .search kbd { position: absolute; right: 1.375rem; top: 50%; transform: translateY(-50%); pointer-events: none; }
 .search input:focus + kbd, .search input:not(:placeholder-shown) + kbd { display: none; }
