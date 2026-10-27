@@ -2,3 +2,4 @@
 decompiler/bin/
 decompiler/obj/
 node_modules/
+dist/

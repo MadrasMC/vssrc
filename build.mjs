@@ -1,12 +1,12 @@
-// Builds dist/: index.html (page, styles, app script) plus the files it loads, each named by a
-// content hash so they can be cached forever: runtime.<hash>.bin (the .NET runtime, the decompiler
-// and the .NET reference pack, gzipped), worker.<hash>.js, editor.<hash>.js (CodeMirror), the icons
-// and the two Geist fonts.
-// dist/og.png is rendered separately from src/og.html. Run with `node build.mjs` or `bun build.mjs`;
-// pass --skip-dotnet to reuse the last publish.
+// Builds dist/ from scratch: index.html (page, styles, app script), og.png, and the files the page
+// loads, each named by a content hash so they can be cached forever: runtime.<hash>.bin (the .NET
+// runtime, the decompiler and the .NET reference pack, gzipped), worker.<hash>.js, editor.<hash>.js
+// (CodeMirror), the icons and the two Geist fonts. The page references them all relatively, so dist/
+// works deployed as any folder (served with a trailing slash). Run with `node build.mjs` or
+// `bun build.mjs`; pass --skip-dotnet to reuse the last publish.
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
@@ -55,10 +55,9 @@ const length = Buffer.alloc(4);
 length.writeUInt32LE(header.length);
 const bundle = gzipSync(Buffer.concat([length, header, ...entries.map((e) => e.data)]), { level: 9 });
 
-// Where dist/ is deployed. The page lives at SITE with no trailing slash, so every file it loads is
-// addressed by absolute path from BASE; canonical, og:url and og:image are built from SITE too.
-const SITE = "https://madrasmc.ftrs.im/vssrc";
-const BASE = new URL(SITE).pathname.replace(/\/?$/, "/");
+// Where dist/ is deployed, used only for canonical, og:url and og:image: link-preview crawlers need
+// absolute URLs. Everything else in the page is relative.
+const SITE = "https://madrasmc.ftrs.im/vssrc/";
 
 const worker = readFileSync(join(root, "src", "worker.js"));
 
@@ -69,12 +68,10 @@ execFileSync(process.platform === "win32" ? "bun.exe" : "bun",
 	{ cwd: root, stdio: ["ignore", "ignore", "inherit"] });
 const editor = readFileSync(editorOut);
 
+// dist/ is build output only (gitignored), so it starts empty and never keeps stale hashed files.
 const dist = join(root, "dist");
-mkdirSync(dist, { recursive: true });
-// Drop the previous build's hashed files (and the single-file page this layout replaced).
-for (const name of readdirSync(dist))
-	if (/^(runtime|worker|editor|icon|apple-touch-icon|geist|geist-mono)\.[0-9a-f]{8}\.(bin|js|svg|png|woff2)$/.test(name) || name === "vssrc.html")
-		rmSync(join(dist, name));
+rmSync(dist, { recursive: true, force: true });
+mkdirSync(dist);
 /** Writes data to dist/<base>.<hash>.<ext> and returns that file name. */
 const emit = (base, ext, data) => {
 	const name = `${base}.${createHash("sha256").update(data).digest("hex").slice(0, 8)}.${ext}`;
@@ -87,6 +84,8 @@ const icon = emit("icon", "svg", src("icon.svg"));
 const touchIcon = emit("apple-touch-icon", "png", src("apple-touch-icon.png"));
 const geist = emit("geist", "woff2", src("fonts/geist-latin.woff2"));
 const geistMono = emit("geist-mono", "woff2", src("fonts/geist-mono-latin.woff2"));
+// Unhashed: og:image is a fixed URL that crawlers cache. Rendered from src/og.html (see its header).
+copyFileSync(join(root, "src", "og.png"), join(dist, "og.png"));
 
 // Linux client downloads, hardcoded: api.vintagestory.at sends no CORS headers, so the page can't
 // fetch the list itself. Refresh with --update-versions; the page links newer releases elsewhere.
@@ -111,7 +110,6 @@ const replace = (token, value) => {
 	html = html.split(token).join(value);
 };
 replace("{{SITE}}", SITE);
-replace("{{BASE}}", BASE);
 replace("{{ICON}}", icon);
 replace("{{TOUCH_ICON}}", touchIcon);
 replace("{{GEIST}}", geist);
