@@ -4,9 +4,11 @@
 // pack, gzipped), the icons and the two Geist fonts. The page references them all relatively, so
 // dist/ works deployed as any folder (served with a trailing slash).
 //
-// bun run emit                      full build, including `dotnet publish`
-// bun run emit --skip-dotnet        reuse the last publish
-// bun run emit --update-versions    refresh src/versions.json from api.vintagestory.at first
+// bun run emit                    full build, including `dotnet publish`
+//   --skip-dotnet                 reuse the last publish
+//   --embed-versions              embed every Linux client version, not just the latest stable one
+//   --use-proxy                   have the page load the full list from versions/{stable,unstable}.json
+//                                 next to it, where the server proxies api.vintagestory.at (see README)
 import { copyFileSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { linuxDownloads, type Manifest } from "./src/versions.ts";
@@ -68,17 +70,24 @@ const bundle = Bun.gzipSync(Buffer.concat([length, header, ...entries.map((e) =>
 
 // ---- Version list ---------------------------------------------------------------------------
 
-// Linux client downloads, bundled into the page. api.vintagestory.at sends no CORS headers, so a
-// deployment that proxies its manifests next to the page (versions/{stable,unstable}.json) gets a
-// live list; everywhere else the page uses this one, refreshed with --update-versions.
-const versionsPath = join(src, "versions.json");
-if (Bun.argv.includes("--update-versions")) {
-	const manifest = async (branch: string) => await (await fetch(`https://api.vintagestory.at/${branch}.json`)).json() as Manifest;
-	const versions = linuxDownloads({ stable: await manifest("stable"), unstable: await manifest("unstable") });
-	await Bun.write(versionsPath, JSON.stringify(versions, null, "\t") + "\n");
-	console.log(`${versionsPath}: ${versions.length} versions`);
+// The page always embeds the latest stable Linux client, read from api.vintagestory.at at build time;
+// --embed-versions embeds every version instead. The API sends no CORS headers, so the page can only
+// load the list itself where the server proxies it (--use-proxy); it then replaces what is embedded.
+const embedVersions = Bun.argv.includes("--embed-versions");
+const useProxy = Bun.argv.includes("--use-proxy");
+async function manifest(branch: string) {
+	const response = await fetch(`https://api.vintagestory.at/${branch}.json`).catch((err: unknown) => {
+		throw new Error(`Fetching the ${branch} version list from api.vintagestory.at failed; the build needs network access`, { cause: err });
+	});
+	if (!response.ok)
+		throw new Error(`Fetching the ${branch} version list from api.vintagestory.at failed (HTTP ${response.status})`);
+	return await response.json() as Manifest;
 }
-const versions: unknown = JSON.parse(readFileSync(versionsPath, "utf8"));
+const downloads = linuxDownloads({ stable: await manifest("stable"), unstable: embedVersions ? await manifest("unstable") : {} });
+const latest = downloads.find((d) => d.branch === "stable");
+if (!latest)
+	throw new Error("api.vintagestory.at lists no stable Linux client");
+const versions = embedVersions ? downloads : [latest];
 
 // ---- dist/ ----------------------------------------------------------------------------------
 
@@ -115,6 +124,7 @@ const worker = await bundleScript("worker.ts");
 const app = await bundleScript("app.ts", {
 	BUILD_FILES: JSON.stringify({ runtime, worker }),
 	BUILD_VERSIONS: JSON.stringify(versions),
+	BUILD_USE_PROXY: JSON.stringify(useProxy),
 });
 const icon = emit("icon", "svg", readFileSync(join(src, "icon.svg")));
 const touchIcon = emit("apple-touch-icon", "png", readFileSync(join(src, "apple-touch-icon.png")));
@@ -140,3 +150,4 @@ await Bun.write(join(dist, "index.html"), html);
 const kb = (n: number) => (n / 1024).toFixed(0) + " KB";
 console.log(readdirSync(dist).sort().map((name) => `${name.padEnd(36)} ${kb(Bun.file(join(dist, name)).size)}`).join("\n"));
 console.log(`(runtime: ${entries.length} files, ref pack ${refVersion})`);
+console.log(`versions: ${embedVersions ? `${versions.length} embedded` : `latest (${latest.version}) embedded`}, ${useProxy ? "full list from the proxy" : "no proxy"}`);

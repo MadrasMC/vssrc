@@ -4,10 +4,12 @@ import type { CodeEditor, EditorSnapshot, LineRange } from "./editor.ts";
 import type { ImportResult, Op, Ops, Progress, Reply, VersionRecord } from "./protocol.ts";
 import { linuxDownloads, type Branch, type Download, type Manifest } from "./versions.ts";
 
-// Filled in by build.ts (Bun's define): hashed file names next to the page, and the bundled version
-// list (src/versions.json). fetchLiveVersions() replaces the list where the deployment proxies the API.
+// Filled in by build.ts (Bun's define): hashed file names next to the page, the embedded versions
+// (the latest stable one, or all with --embed-versions), and whether the server proxies the full
+// list (--use-proxy), in which case fetchLiveVersions() replaces the embedded one.
 declare const BUILD_FILES: { runtime: string; worker: string };
 declare const BUILD_VERSIONS: Download[];
+declare const BUILD_USE_PROXY: boolean;
 const FILES = BUILD_FILES;
 let versions: Download[] = BUILD_VERSIONS;
 const newest = () => versions.find((d) => d.branch === "stable")!;
@@ -1273,13 +1275,14 @@ function renderDownload(version: string) {
 }
 
 function renderVersionSelect() {
-	const groups = ([["stable", "Stable"], ["unstable", "Pre-release"]] as const).map(([branch, label]) => {
+	// A group with no versions (no pre-releases embedded) is left out rather than shown empty.
+	const groups = ([["stable", "Stable"], ["unstable", "Pre-release"]] as const).flatMap(([branch, label]) => {
 		const group = document.createElement("optgroup");
 		group.label = label;
 		for (const d of versions)
 			if (d.branch === branch)
 				group.append(new Option(d.version, d.version));
-		return group;
+		return group.childElementCount ? [group] : [];
 	});
 	$<HTMLSelectElement>("version-select").replaceChildren(...groups);
 	$("newest-version").textContent = newest().version;
@@ -1317,9 +1320,9 @@ renderVersionSelect();
 renderWanted(null);
 
 /**
- * Swaps in the live version list where the deployment proxies api.vintagestory.at's manifests
- * next to the page (versions/stable.json and versions/unstable.json; the API itself sends no CORS
- * headers). Anywhere else the requests fail and the bundled list stays.
+ * Swaps in the live version list, in builds made for a server that proxies api.vintagestory.at's
+ * manifests next to the page (versions/stable.json and versions/unstable.json; the API itself sends
+ * no CORS headers). If the requests fail anyway, the embedded versions stay.
  */
 async function fetchLiveVersions() {
 	const manifest = async (branch: Branch) => {
@@ -1337,7 +1340,7 @@ async function fetchLiveVersions() {
 		renderVersionSelect();
 		renderDownload(downloadShown());
 	} catch {
-		// Not proxied here (another host, a local file, offline), or not JSON: the bundled list stays.
+		// Not proxied after all (a local file, offline, a misconfigured server), or not JSON.
 	}
 }
 
@@ -1452,8 +1455,9 @@ document.addEventListener("keydown", (e) => {
 // ---- Start ----------------------------------------------------------------------------------
 
 (async () => {
-	// In the background: the picker shows the bundled list until (and unless) the live one arrives.
-	fetchLiveVersions();
+	// In the background: the picker shows the embedded versions until (and unless) the live list arrives.
+	if (BUILD_USE_PROXY)
+		fetchLiveVersions();
 	if (unsupported) {
 		$("runtime-status").hidden = true;
 		showStart();

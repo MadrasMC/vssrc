@@ -1,5 +1,5 @@
-// Linux client downloads, picked out of api.vintagestory.at's manifests. Used by build.ts to write
-// the bundled list (src/versions.json) and by the page to read the live one, so both agree.
+// Linux client downloads, picked out of api.vintagestory.at's manifests. Used by build.ts for the
+// embedded versions and by the page to read the live list, so both agree.
 
 export type Branch = "stable" | "unstable";
 
