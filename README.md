@@ -2,7 +2,8 @@
 
 vssrc is a browser-based tool for viewing decompiled Vintage Story C# source code, inspired by https://mcsrc.dev.
 
-The page reads the Linux client tarball locally, keeps the game assemblies in IndexedDB per version, and decompiles types in a Web Worker with ICSharpCode.Decompiler on .NET WebAssembly. Nothing is uploaded.
+The page reads the Linux client tarball locally, keeps the game assemblies in IndexedDB per version, and decompiles types in a Web Worker with ICSharpCode.Decompiler on .NET WebAssembly.
+Nothing is uploaded.
 
 Deployed at https://madrasmc.ftrs.im/vssrc/.
 
@@ -29,20 +30,22 @@ bun install
 bun run emit
 ```
 
-`emit` publishes the decompiler, then writes `dist/` from scratch. It fetches the version list from api.vintagestory.at, so it needs network access.
+`emit` publishes the decompiler, then writes `dist/` from scratch.
+It fetches the version list from api.vintagestory.at, so it needs network access.
 
 | flag | effect |
 | --- | --- |
-| – | embed the latest stable Linux client only |
 | `--embed-versions` | embed every Linux client version, stable and pre-release |
 | `--use-proxy` | load the full list from the server at runtime, replacing the embedded versions (see Version list proxy) |
 | `--skip-dotnet` | reuse the last `dotnet publish` |
 
-The flags combine. `bun run check` type-checks the page, the worker and the build script.
+The flags combine.
+`bun run check` type-checks the page, the worker and the build script.
 
 ## Deploy
 
-Set `SITE` in `build.ts` to the deployed URL; it is used only for the canonical and og tags, which need absolute URLs. Everything else in the page is relative, so `dist/` works as any folder, served with a trailing slash (`/vssrc/`, not `/vssrc`).
+Set `SITE` in `build.ts` to the deployed URL; it is used only for the canonical and og tags, which need absolute URLs.
+Everything else in the page is relative, so `dist/` works as any folder, served with a trailing slash (`/vssrc/`, not `/vssrc`).
 
 | file | caching |
 | --- | --- |
@@ -57,9 +60,12 @@ default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob:; 
 
 ## Version list proxy
 
-api.vintagestory.at sends no CORS headers, so the page can only read the version list if the server proxies it next to the page, at `versions/stable.json` and `versions/unstable.json`. Build with `--use-proxy` for such a server. If the requests fail, the embedded versions stay.
+api.vintagestory.at sends no CORS headers, so the page can only read the version list if the server proxies it next to the page, at `versions/stable.json` and `versions/unstable.json`.
+Build with `--use-proxy` for such a server.
+If the requests fail, the embedded versions stay.
 
-nginx, with the page at `/vssrc/`. In the `http` block:
+nginx, with the page at `/vssrc/`.
+In the `http` block:
 
 ```nginx
 proxy_cache_path /var/cache/nginx/vsapi keys_zone=vsapi:1m max_size=10m inactive=1d;
@@ -99,7 +105,8 @@ Don't put `add_header` in these locations: nginx then drops every `add_header` i
 
 ## Link preview
 
-`src/og.png` (1200×630) is rendered from `src/og.html` and committed; the build copies it into `dist/`. To re-render, from the project root:
+`src/og.png` (1200×630) is rendered from `src/og.html` and committed; the build copies it into `dist/`.
+To re-render, from the project root:
 
 ```bash
 google-chrome --headless=new --allow-file-access-from-files --hide-scrollbars --window-size=1200,630 --screenshot=src/og.png src/og.html
