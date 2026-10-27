@@ -1,30 +1,45 @@
-// Read-only CodeMirror view for decompiled code. Bundled by build.mjs into a classic script that
-// sets globalThis.vssrcEditor; the page's own script stays unbundled.
-import { EditorState, RangeSet, StateEffect, StateField } from "@codemirror/state";
+// Read-only CodeMirror view for decompiled code. app.ts imports it with import(), so the build
+// splits it into its own chunk that loads while the decompiler starts.
+import { EditorState, RangeSet, RangeValue, StateEffect, StateField, type Extension } from "@codemirror/state";
 import {
 	Decoration, EditorView, GutterMarker, drawSelection, gutterLineClass, highlightActiveLine,
-	highlightActiveLineGutter, keymap, lineNumbers,
+	highlightActiveLineGutter, keymap, lineNumbers, type DecorationSet,
 } from "@codemirror/view";
 import { defaultKeymap } from "@codemirror/commands";
 import { codeFolding, foldGutter, foldKeymap, foldService } from "@codemirror/language";
 import { highlightSelectionMatches, search, searchKeymap } from "@codemirror/search";
 
+/** A first and last line number, 1-based and inclusive. */
+export type LineRange = [number, number];
+
+/** A span or link of the decompiler's HTML, as a text range. */
+interface Mark {
+	from: number;
+	to: number;
+	cls: string | null;
+	href: string | null;
+	title: string | null;
+	def: boolean;
+}
+
 /**
  * Splits the decompiler's HTML into plain text and the ranges its spans and links covered.
  * Definitions (id="d<token>") come back as token -> offset, the anchors for member links.
  */
-function parse(html) {
+function parse(html: string) {
 	const template = document.createElement("template");
 	template.innerHTML = html;
 	let text = "";
-	const marks = [];
-	const defs = new Map();
-	const walk = (node) => {
+	const marks: Mark[] = [];
+	const defs = new Map<string, number>();
+	const walk = (node: Node) => {
 		for (let child = node.firstChild; child; child = child.nextSibling) {
-			if (child.nodeType === 3) {
+			if (child instanceof Text) {
 				text += child.data;
 				continue;
 			}
+			if (!(child instanceof Element))
+				continue;
 			const from = text.length;
 			walk(child);
 			const cls = child.getAttribute("class");
@@ -41,12 +56,12 @@ function parse(html) {
 	return { text, marks, defs };
 }
 
-function decorations(marks) {
+function decorations(marks: Mark[]): DecorationSet {
 	const ranges = [];
 	for (const m of marks) {
 		if (m.from === m.to)
 			continue;
-		const spec = { class: "tok-" + m.cls + (m.def ? " tok-def" : "") };
+		const spec: { class: string; tagName?: string; attributes?: Record<string, string> } = { class: "tok-" + m.cls + (m.def ? " tok-def" : "") };
 		if (m.href) {
 			spec.tagName = "a";
 			spec.attributes = { href: m.href };
@@ -58,17 +73,17 @@ function decorations(marks) {
 	return Decoration.set(ranges, true);
 }
 
-// ---- Linked lines (the permalink's ?l= range) ----
+// ---- Linked lines (the permalink's l= range) ----
 
-const setLinked = StateEffect.define();
+const setLinked = StateEffect.define<LineRange | null>();
 
 class LinkedGutter extends GutterMarker {
-	elementClass = "cm-linked-gutter";
+	override elementClass = "cm-linked-gutter";
 }
 const linkedGutter = new LinkedGutter();
 
-/** Holds the linked line range as [first, last] line numbers, or null. */
-const linkedField = StateField.define({
+/** Holds the linked line range, or null. */
+const linkedField = StateField.define<LineRange | null>({
 	create: () => null,
 	update(value, tr) {
 		for (const e of tr.effects)
@@ -82,7 +97,7 @@ const linkedField = StateField.define({
 	],
 });
 
-function lineRanges(state, linked, value) {
+function lineRanges<T extends RangeValue>(state: EditorState, linked: LineRange | null, value: T): RangeSet<T> {
 	if (!linked)
 		return RangeSet.empty;
 	const ranges = [];
@@ -94,7 +109,7 @@ function lineRanges(state, linked, value) {
 
 // ---- Folding ----
 
-const indentOf = (text) => /^\s*/.exec(text)[0].length;
+const indentOf = (text: string) => /^\s*/.exec(text)![0].length;
 
 /**
  * The decompiler writes braces on their own lines (Allman style) with consistent tabs, so a
@@ -119,7 +134,7 @@ const braceFolding = foldService.of((state, lineStart) => {
 });
 
 /** A caret pointing down when the block is open, right when folded. */
-function foldMarker(open) {
+function foldMarker(open: boolean) {
 	const span = document.createElement("span");
 	span.className = "cm-fold-marker" + (open ? "" : " cm-fold-closed");
 	span.title = open ? "Fold" : "Unfold";
@@ -173,13 +188,23 @@ const theme = EditorView.theme({
 	".tok-def": { fontWeight: "600" },
 });
 
-/**
- * @param parent element the editor fills
- * @param onLineClick (line, extend) for a click on a line number; extend is true with Shift
- * @param onLink (href) for a plain click on a reference
- */
-function create(parent, { onLineClick, onLink }) {
-	const base = [
+/** Everything needed to come back to a document as it was: text, folds, selection, scroll. */
+export interface EditorSnapshot {
+	state: EditorState;
+	scroll: number;
+	defs: Map<string, number>;
+}
+
+export interface EditorEvents {
+	/** A click on a line number; extend is true with Shift. */
+	onLineClick(line: number, extend: boolean): void;
+	/** A plain click on a reference. */
+	onLink(href: string): void;
+}
+
+/** A read-only code view filling parent. */
+export function create(parent: HTMLElement, { onLineClick, onLink }: EditorEvents) {
+	const base: Extension[] = [
 		EditorState.readOnly.of(true),
 		EditorState.tabSize.of(4),
 		// Editable so the caret, selection keys and Ctrl+F work, but never opens a soft keyboard.
@@ -187,7 +212,7 @@ function create(parent, { onLineClick, onLink }) {
 		lineNumbers({
 			domEventHandlers: {
 				mousedown(view, block, event) {
-					if (event.button !== 0)
+					if (!(event instanceof MouseEvent) || event.button !== 0)
 						return false;
 					onLineClick(view.state.doc.lineAt(block.from).number, event.shiftKey);
 					return true;
@@ -207,61 +232,59 @@ function create(parent, { onLineClick, onLink }) {
 		theme,
 		EditorView.domEventHandlers({
 			click(event) {
-				const a = event.target.closest?.("a[href]");
-				if (!a || event.button !== 0)
+				const a = event.target instanceof Element ? event.target.closest("a[href]") : null;
+				const href = a?.getAttribute("href");
+				if (!href || event.button !== 0)
 					return false;
 				event.preventDefault();
 				// Links inside an editable region don't navigate natively, so both cases are handled here.
 				if (event.ctrlKey || event.metaKey || event.shiftKey)
-					window.open(a.getAttribute("href"), "_blank", "noopener");
+					window.open(href, "_blank", "noopener");
 				else
-					onLink(a.getAttribute("href"));
+					onLink(href);
 				return true;
 			},
 		}),
 	];
 	const view = new EditorView({ parent, state: EditorState.create({ extensions: base }) });
-	let defs = new Map();
+	let defs = new Map<string, number>();
 
 	return {
-		/** Replaces the document; returns the definition offsets so callers can resolve m= anchors. */
-		show(html) {
+		/** Replaces the document. */
+		show(html: string) {
 			const parsed = parse(html);
 			defs = parsed.defs;
 			view.setState(EditorState.create({
 				doc: parsed.text,
 				extensions: [base, EditorView.decorations.of(decorations(parsed.marks))],
 			}));
-			return defs;
 		},
-		/** Highlights [first, last] (1-based) or clears with null; scrolls to it when asked. */
-		link(range, scroll) {
+		/** Highlights a line range, or clears it with null; scrolls to it when asked. */
+		link(range: LineRange | null, scroll: boolean) {
 			view.dispatch({ effects: setLinked.of(range) });
 			if (range && scroll) {
 				const line = view.state.doc.line(Math.min(range[0], view.state.doc.lines));
 				view.dispatch({ effects: EditorView.scrollIntoView(line.from, { y: "center" }) });
 			}
 		},
-		/** Everything needed to come back to this document as it was: text, folds, selection, scroll. */
-		save() {
+		save(): EditorSnapshot {
 			return { state: view.state, scroll: view.scrollDOM.scrollTop, defs };
 		},
-		restore(saved) {
+		restore(saved: EditorSnapshot) {
 			view.setState(saved.state);
 			defs = saved.defs;
 			// After the new state's first layout, or the scroll position lands on stale heights.
 			requestAnimationFrame(() => { view.scrollDOM.scrollTop = saved.scroll; });
 		},
-		lineOf(token) {
-			return defs.has(token) ? view.state.doc.lineAt(defs.get(token)).number : null;
+		/** The line a member's definition starts on, by its metadata token. */
+		lineOf(token: string) {
+			const offset = defs.get(token);
+			return offset === undefined ? null : view.state.doc.lineAt(offset).number;
 		},
 		scrollTop() {
 			view.dispatch({ effects: EditorView.scrollIntoView(0, { y: "start" }) });
 		},
-		focus() {
-			view.focus();
-		},
 	};
 }
 
-globalThis.vssrcEditor = { create };
+export type CodeEditor = ReturnType<typeof create>;

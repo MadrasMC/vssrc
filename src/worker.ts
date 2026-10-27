@@ -1,48 +1,70 @@
 // Runs the .NET decompiler, streams tarballs and owns IndexedDB. The page only renders.
-// Messages in: { id, op, ...args }. Out: { id, result } | { id, error } | { progress }.
+// Messages in: a Request. Out: a Reply (see protocol.ts).
+import type { Archive, ImportResult, Op, Ops, Progress, Reply, Request, StoredFile, VersionRecord } from "./protocol.ts";
 
 const DB_NAME = "vssrc";
 /** Assemblies shown in the tree, in tree order. Everything else in the tarball is reference-only. */
 const BROWSED = ["VintagestoryLib", "Vintagestory"];
 
-let exports_;
-let ready;
+/** The [JSExport] methods of decompiler/Program.cs. */
+interface DecompilerExports {
+	AddFile(name: string, data: Uint8Array, isFramework: boolean): void;
+	Clear(): void;
+	Inspect(data: Uint8Array): string;
+	Open(version: string, assemblies: string[]): string;
+	Decompile(assembly: string, type: string): string;
+}
+
+/** The part of dotnet.js's host builder used here. */
+interface DotnetHostBuilder {
+	withConfig(config: { cacheBootResources: boolean }): DotnetHostBuilder;
+	withResourceLoader(loader: (type: string, name: string) => string | Promise<Response>): DotnetHostBuilder;
+	create(): Promise<{ getAssemblyExports(assembly: string): Promise<{ Exports: DecompilerExports }> }>;
+}
+
+let exports_: DecompilerExports;
+let ready: Promise<void> | undefined;
 /** Version whose files are currently loaded into the runtime. */
-let openVersion = null;
+let openVersion: string | null = null;
 /** Lowercase simple names of the bundled .NET reference assemblies. */
-const frameworkNames = new Set();
+const frameworkNames = new Set<string>();
+
+function send(reply: Reply) {
+	postMessage(reply);
+}
 
 // addEventListener, never self.onmessage: with onmessage assigned, the .NET 10 runtime's
 // startup stalls after loading assemblies and never completes inside a worker.
-self.addEventListener("message", async (e) => {
+addEventListener("message", async (e: MessageEvent<Request>) => {
 	const { id, op, ...args } = e.data;
 	try {
-		const result = await ops[op](args);
-		self.postMessage({ id, result });
+		const result = await (ops[op] as (args: unknown) => unknown)(args);
+		send({ id, result });
 	} catch (err) {
 		console.error(err);
-		self.postMessage({ id, error: String(err?.message ?? err) });
+		send({ id, error: err instanceof Error ? err.message : String(err) });
 	}
 });
 
-function progress(data) {
-	self.postMessage({ progress: data });
+function progress(data: Progress) {
+	send({ progress: data });
 }
 
-const ops = {
-	init({ bundle }) {
+const ops: { [K in Op]: (args: Ops[K]["args"]) => Promise<Ops[K]["result"]> } = {
+	async init({ bundle }) {
 		ready = boot(bundle);
-		return ready.then(() => true);
+		await ready;
+		return true;
 	},
 
 	async versions() {
 		const db = await openDb();
-		return await req(db.transaction("versions").objectStore("versions").getAll());
+		return await req<VersionRecord[]>(db.transaction("versions").objectStore("versions").getAll());
 	},
 
 	async delete({ version }) {
 		const db = await openDb();
-		const record = await req(db.transaction("versions").objectStore("versions").get(version));
+		const record = await req<VersionRecord | undefined>(db.transaction("versions").objectStore("versions").get(version));
 		if (!record)
 			return false;
 		const tx = db.transaction(["versions", "files"], "readwrite");
@@ -63,16 +85,17 @@ const ops = {
 		await ready;
 		const db = await openDb();
 		const tx = db.transaction(["versions", "files"]);
-		const record = await req(tx.objectStore("versions").get(version));
+		const record = await req<VersionRecord | undefined>(tx.objectStore("versions").get(version));
 		if (!record)
 			throw new Error(`Version ${version} is not stored`);
-		const data = await Promise.all(record.files.map((f) => req(tx.objectStore("files").get(version + "/" + f.name))));
+		const data = await Promise.all(record.files.map((f) => req<ArrayBuffer | undefined>(tx.objectStore("files").get(version + "/" + f.name))));
 		exports_.Clear();
 		openVersion = null;
 		record.files.forEach((f, i) => {
-			if (!data[i])
+			const bytes = data[i];
+			if (!bytes)
 				throw new Error(`${f.name} is missing from storage; import ${version} again`);
-			exports_.AddFile(f.name, new Uint8Array(data[i]), false);
+			exports_.AddFile(f.name, new Uint8Array(bytes), false);
 		});
 		const browsed = BROWSED.filter((n) => record.files.some((f) => f.name.toLowerCase() === n.toLowerCase() + ".dll"));
 		const listing = exports_.Open(version, browsed);
@@ -94,7 +117,7 @@ const ops = {
  * The bundle (runtime.<hash>.bin next to the page) is a gzipped blob of every runtime file plus the
  * .NET reference pack: u32 LE header length, JSON [{ name, size }], then the files back to back.
  */
-async function boot(url) {
+async function boot(url: string) {
 	const response = await fetch(url);
 	if (!response.ok)
 		throw new Error(`Loading the decompiler failed (HTTP ${response.status})`);
@@ -103,27 +126,31 @@ async function boot(url) {
 	if (raw[0] === 0x1f && raw[1] === 0x8b)
 		raw = new Uint8Array(await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer());
 	const headerLength = new DataView(raw.buffer).getUint32(0, true);
-	const header = JSON.parse(new TextDecoder().decode(raw.subarray(4, 4 + headerLength)));
-	const files = new Map();
+	const header: { name: string; size: number }[] = JSON.parse(new TextDecoder().decode(raw.subarray(4, 4 + headerLength)));
+	const files = new Map<string, Uint8Array<ArrayBuffer>>();
 	let offset = 4 + headerLength;
 	for (const { name, size } of header) {
 		files.set(name, raw.subarray(offset, offset + size));
 		offset += size;
 	}
-	const moduleUrl = (name) => URL.createObjectURL(new Blob([files.get(name)], { type: "text/javascript" }));
+	const file = (name: string) => {
+		const data = files.get(name);
+		if (!data)
+			throw new Error(`Runtime file ${name} is not in the bundle`);
+		return data;
+	};
+	const moduleUrl = (name: string) => URL.createObjectURL(new Blob([file(name)], { type: "text/javascript" }));
 
-	const { dotnet } = await import(moduleUrl("fw/dotnet.js"));
+	const { dotnet } = await import(moduleUrl("fw/dotnet.js")) as { dotnet: DotnetHostBuilder };
 	const runtime = await dotnet
 		.withConfig({ cacheBootResources: false })
 		.withResourceLoader((type, name) => {
 			const key = "fw/" + name.split("/").pop();
-			if (!files.has(key))
-				throw new Error(`Runtime file ${name} is not in the bundle`);
 			// JS modules must come back as URLs (the loader import()s them); everything else as a
 			// Promise of a Response (the loader checks `instanceof Promise`, a bare Response is ignored).
 			if (key.endsWith(".js"))
 				return moduleUrl(key);
-			return Promise.resolve(new Response(files.get(key), {
+			return Promise.resolve(new Response(file(key), {
 				headers: { "content-type": type === "dotnetwasm" ? "application/wasm" : "application/octet-stream" },
 			}));
 		})
@@ -138,15 +165,32 @@ async function boot(url) {
 
 // ---- Import ---------------------------------------------------------------------------------
 
+/** One .dll read from the archive, under its original file name. */
+interface Candidate {
+	name: string;
+	data: Uint8Array;
+}
+
+/** What Exports.Inspect reports about one assembly. */
+interface AssemblyInfo {
+	file: Candidate;
+	name: string;
+	informational: string;
+	gameVersion: string;
+	fileVersion: string;
+	assemblyVersion: string;
+	refs: string[];
+}
+
 /**
  * Streams the tarball once. Every .dll is held until the end because which ones the browsed
  * assemblies reference is only known once all are read; only that closure is stored.
  */
-async function importTarball({ file }) {
+async function importTarball({ file }: { file: File }): Promise<ImportResult> {
 	const total = file.size;
 	let read = 0;
 	let reported = 0;
-	const counter = new TransformStream({
+	const counter = new TransformStream<Uint8Array, Uint8Array>({
 		transform(chunk, controller) {
 			read += chunk.byteLength;
 			if (read - reported > 4 << 20 || read === total) {
@@ -156,18 +200,18 @@ async function importTarball({ file }) {
 			controller.enqueue(chunk);
 		},
 	});
-	let stream;
+	let stream: ReadableStream<Uint8Array>;
 	try {
-		stream = file.stream().pipeThrough(counter).pipeThrough(new DecompressionStream("gzip"));
+		stream = file.stream().pipeThrough(counter).pipeThrough(new DecompressionStream("gzip") as unknown as TransformStream<Uint8Array, Uint8Array>);
 	} catch {
 		throw new Error("This browser cannot decompress gzip streams");
 	}
 
-	const candidates = new Map(); // lowercase file name -> { name, data }
-	const pdbs = new Map();
+	const candidates = new Map<string, Candidate>(); // lowercase file name -> file
+	const pdbs = new Map<string, Candidate>();
 	try {
 		for await (const entry of readTar(stream)) {
-			const base = entry.path.split("/").pop();
+			const base = entry.path.split("/").pop() ?? "";
 			const lower = base.toLowerCase();
 			const depth = entry.path.split("/").length;
 			if (lower.endsWith(".dll") && depth <= 3 && !candidates.has(lower))
@@ -176,7 +220,7 @@ async function importTarball({ file }) {
 				pdbs.set(lower, { name: base, data: await entry.read() });
 		}
 	} catch (err) {
-		if (err instanceof TypeError || /gzip|decompress|incorrect header/i.test(err.message))
+		if (err instanceof TypeError || (err instanceof Error && /gzip|decompress|incorrect header/i.test(err.message)))
 			throw new Error("Not a gzip file. Choose the Linux tar.gz Archive (full): vs_client_linux-x64_….tar.gz");
 		throw err;
 	}
@@ -186,24 +230,24 @@ async function importTarball({ file }) {
 
 	progress({ phase: "resolve" });
 	await ready;
-	const info = new Map(); // lowercase simple name -> { name, version fields, refs }
+	const info = new Map<string, AssemblyInfo>(); // lowercase simple name -> assembly
 	for (const [lower, c] of candidates) {
 		const text = exports_.Inspect(c.data);
 		if (!text)
 			continue;
-		const [head, ...refs] = text.trimEnd().split("\n");
-		const [name, informational, gameVersion, fileVersion, assemblyVersion] = head.split("\t");
+		const [head = "", ...refs] = text.trimEnd().split("\n");
+		const [name = "", informational = "", gameVersion = "", fileVersion = "", assemblyVersion = ""] = head.split("\t");
 		info.set(lower.slice(0, -4), { file: c, name, informational, gameVersion, fileVersion, assemblyVersion, refs });
 	}
 
-	const keep = new Set();
+	const keep = new Set<string>();
 	const queue = BROWSED.map((n) => n.toLowerCase()).filter((n) => info.has(n));
 	while (queue.length) {
-		const n = queue.pop();
+		const n = queue.pop()!;
 		if (keep.has(n))
 			continue;
 		keep.add(n);
-		for (const r of info.get(n).refs)
+		for (const r of info.get(n)!.refs)
 			if (info.has(r.toLowerCase()))
 				queue.push(r.toLowerCase());
 	}
@@ -211,19 +255,21 @@ async function importTarball({ file }) {
 	// VintagestoryLib carries no AssemblyInformationalVersion as of 1.22; the API's GameVersion
 	// constant (which keeps pre-release suffixes like -rc.3) comes before the plain file version.
 	const lib = info.get("vintagestorylib");
+	if (!lib)
+		throw new Error("VintagestoryLib.dll in this archive is not a .NET assembly");
 	const version = lib.informational || info.get("vintagestoryapi")?.gameVersion || lib.fileVersion || lib.assemblyVersion;
 
 	// The server-only archive ships the same VintagestoryLib.dll and PDB but not Vintagestory.dll or
 	// client libraries such as OpenTK.Graphics. It is accepted; the record says so, and lists what
 	// the browsed assemblies reference but the archive lacks, so the page can warn.
-	const archive = info.has("vintagestory") ? "client" : "server";
-	const missing = [...new Set(BROWSED.map((n) => n.toLowerCase()).filter((n) => info.has(n)).flatMap((n) => info.get(n).refs))]
+	const archive: Archive = info.has("vintagestory") ? "client" : "server";
+	const missing = [...new Set(BROWSED.map((n) => n.toLowerCase()).filter((n) => info.has(n)).flatMap((n) => info.get(n)!.refs))]
 		.filter((r) => !info.has(r.toLowerCase()) && !frameworkNames.has(r.toLowerCase()))
 		.sort();
 
-	const files = [];
+	const files: (StoredFile & { data: Uint8Array })[] = [];
 	for (const n of keep) {
-		const { file: c } = info.get(n);
+		const { file: c } = info.get(n)!;
 		files.push({ name: c.name, size: c.data.byteLength, role: BROWSED.some((b) => b.toLowerCase() === n) ? "browse" : "ref", data: c.data });
 	}
 	for (const [, p] of pdbs)
@@ -231,7 +277,7 @@ async function importTarball({ file }) {
 
 	progress({ phase: "save" });
 	const db = await openDb();
-	const existing = await req(db.transaction("versions").objectStore("versions").get(version));
+	const existing = await req<VersionRecord | undefined>(db.transaction("versions").objectStore("versions").get(version));
 	// Never replace a full import with a server-only one. Records from before archives were tracked are full.
 	if (existing && archive === "server" && (existing.archive ?? "client") === "client")
 		return { version, archive: "client", missing: existing.missing ?? [], kept: true };
@@ -241,18 +287,19 @@ async function importTarball({ file }) {
 			tx.objectStore("files").delete(version + "/" + f.name);
 	for (const f of files)
 		tx.objectStore("files").put(f.data.buffer.byteLength === f.data.byteLength ? f.data.buffer : f.data.slice().buffer, version + "/" + f.name);
-	tx.objectStore("versions").put({
+	const record: VersionRecord = {
 		version,
 		imported: Date.now(),
 		size: files.reduce((s, f) => s + f.size, 0),
 		files: files.map(({ name, size, role }) => ({ name, size, role })),
 		archive,
 		missing,
-	});
+	};
+	tx.objectStore("versions").put(record);
 	try {
 		await done(tx);
 	} catch (err) {
-		if (err?.name === "QuotaExceededError")
+		if (err instanceof DOMException && err.name === "QuotaExceededError")
 			throw new Error("Not enough storage space for this version");
 		throw err;
 	}
@@ -261,17 +308,24 @@ async function importTarball({ file }) {
 	return { version, archive, missing, kept: false };
 }
 
+/** A regular file in the tarball; its contents are only read if read() is called. */
+interface TarEntry {
+	path: string;
+	size: number;
+	read(): Promise<Uint8Array>;
+}
+
 /**
  * Minimal tar reader over a byte stream: ustar, GNU long names ('L') and pax paths ('x').
- * Yields { path, size, read() } for regular files; unread contents are skipped.
+ * Yields regular files; unread contents are skipped.
  */
-async function* readTar(stream) {
+async function* readTar(stream: ReadableStream<Uint8Array>): AsyncGenerator<TarEntry> {
 	const reader = stream.getReader();
-	let buf = new Uint8Array(0);
+	let buf: Uint8Array = new Uint8Array(0);
 	let pos = 0;
 	let finished = false;
 
-	async function fill(n) {
+	async function fill(n: number) {
 		while (buf.length - pos < n && !finished) {
 			const { value, done } = await reader.read();
 			if (done) {
@@ -292,7 +346,7 @@ async function* readTar(stream) {
 		return buf.length - pos >= n;
 	}
 
-	async function take(n) {
+	async function take(n: number) {
 		const out = new Uint8Array(n);
 		let filled = 0;
 		while (filled < n) {
@@ -306,7 +360,7 @@ async function* readTar(stream) {
 		return out;
 	}
 
-	async function skip(n) {
+	async function skip(n: number) {
 		while (n > 0) {
 			if (!(await fill(1)))
 				throw new Error("The archive ends in the middle of a file");
@@ -316,25 +370,25 @@ async function* readTar(stream) {
 		}
 	}
 
-	const text = (b, start, len) => {
+	const text = (b: Uint8Array, start: number, len: number) => {
 		let end = start;
 		while (end < start + len && b[end] !== 0)
 			end++;
 		return new TextDecoder().decode(b.subarray(start, end));
 	};
-	const octal = (b, start, len) => {
-		if (b[start] & 0x80) {
+	const octal = (b: Uint8Array, start: number, len: number) => {
+		if (b[start]! & 0x80) {
 			// GNU base-256 for sizes past 8 GiB
 			let v = 0;
 			for (let i = start + 1; i < start + len; i++)
-				v = v * 256 + b[i];
+				v = v * 256 + b[i]!;
 			return v;
 		}
 		return parseInt(text(b, start, len).trim() || "0", 8);
 	};
 
-	let longName = null;
-	let paxPath = null;
+	let longName: string | null = null;
+	let paxPath: string | null = null;
 	try {
 		while (true) {
 			if (!(await fill(512)))
@@ -359,7 +413,7 @@ async function* readTar(stream) {
 				const body = new TextDecoder().decode((await take(padded)).subarray(0, size));
 				const match = /\d+ path=([^\n]*)\n/.exec(body);
 				if (match)
-					paxPath = match[1];
+					paxPath = match[1]!;
 				continue;
 			}
 			path = paxPath ?? longName ?? path;
@@ -390,14 +444,13 @@ async function* readTar(stream) {
 
 // ---- IndexedDB ------------------------------------------------------------------------------
 
-let dbPromise;
+let dbPromise: Promise<IDBDatabase> | undefined;
 
 function openDb() {
 	dbPromise ??= new Promise((resolve, reject) => {
 		const r = indexedDB.open(DB_NAME, 1);
 		r.onupgradeneeded = () => {
-			// versions: { version, imported, size, files: [{ name, size, role }], archive: "client" | "server", missing: [assembly name] }
-			// (archive and missing are absent on records from before they were tracked: read as "client", [])
+			// versions: VersionRecord (protocol.ts), keyed by version
 			// files: ArrayBuffer keyed "<version>/<file name>"
 			r.result.createObjectStore("versions", { keyPath: "version" });
 			r.result.createObjectStore("files");
@@ -408,15 +461,15 @@ function openDb() {
 	return dbPromise;
 }
 
-function req(r) {
+function req<T>(r: IDBRequest): Promise<T> {
 	return new Promise((resolve, reject) => {
-		r.onsuccess = () => resolve(r.result);
+		r.onsuccess = () => resolve(r.result as T);
 		r.onerror = () => reject(r.error);
 	});
 }
 
-function done(tx) {
-	return new Promise((resolve, reject) => {
+function done(tx: IDBTransaction) {
+	return new Promise<void>((resolve, reject) => {
 		tx.oncomplete = () => resolve();
 		tx.onerror = () => reject(tx.error);
 		tx.onabort = () => reject(tx.error ?? new Error("Storage transaction aborted"));

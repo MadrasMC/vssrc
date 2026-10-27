@@ -1,0 +1,18 @@
+{
+	// The page: app.ts and the editor chunk it imports, against the DOM. The worker and the build
+	// script run with other globals (WebWorker, Bun), so each has its own config extending this one.
+	"compilerOptions": {
+		"target": "ES2022",
+		"module": "ESNext",
+		"moduleResolution": "bundler",
+		"lib": ["ES2023", "DOM", "DOM.Iterable"],
+		"types": [],
+		"strict": true,
+		"noEmit": true,
+		"isolatedModules": true,
+		"verbatimModuleSyntax": true,
+		"allowImportingTsExtensions": true,
+		"skipLibCheck": true
+	},
+	"include": ["src/app.ts", "src/editor.ts", "src/protocol.ts"]
+}

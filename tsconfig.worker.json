@@ -1,0 +1,8 @@
+{
+	// The decompiler worker: same rules as the page, with worker globals instead of the DOM.
+	"extends": "./tsconfig.json",
+	"compilerOptions": {
+		"lib": ["ES2023", "WebWorker"]
+	},
+	"include": ["src/worker.ts", "src/protocol.ts"]
+}
