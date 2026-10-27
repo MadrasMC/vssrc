@@ -547,6 +547,38 @@ summary .count { font-size: 0.75rem; color: var(--faint); font-variant-numeric: 
 .viewer-note .error { margin: 0; text-align: left; max-width: 40rem; }
 .viewer-note p { margin: 0; }
 
+/* ---- Landing (no tabs open) ---- */
+.landing { flex: 1; overflow: auto; padding: clamp(2rem, 7vh, 4.5rem) 1.5rem calc(3rem + env(safe-area-inset-bottom)); }
+.landing-inner { max-width: 46rem; margin: 0 auto; display: grid; gap: 2.5rem; }
+.landing-head { display: grid; justify-items: center; text-align: center; gap: 1rem; }
+.landing-mark { width: 4.5rem; height: 4.5rem; }
+.landing h2 {
+	margin: 0.5rem 0 0;
+	font-size: clamp(1.375rem, 1rem + 1.4vw, 1.875rem);
+	line-height: 1.2;
+	letter-spacing: -0.025em;
+	font-weight: 600;
+	text-wrap: balance;
+}
+.landing-stats { margin: 0; font: 0.8125rem/1.4 var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.landing-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem; margin-top: 0.5rem; }
+.landing-actions kbd { background: none; border-color: color-mix(in srgb, var(--accent-text) 45%, transparent); color: inherit; }
+@media (hover: none) { .landing-actions kbd { display: none; } }
+.landing h3 { margin: 0 0 0.875rem; font-size: 1rem; font-weight: 600; }
+.landing-card { background: var(--panel); border: 1px solid var(--line); border-radius: 0.75rem; padding: 1.25rem 1.5rem; }
+.landing-card ul { margin: 0; padding-left: 1.125rem; display: grid; gap: 0.5rem; color: var(--muted); line-height: 1.55; }
+.landing a { color: var(--text); text-underline-offset: 0.2em; }
+.features { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr)); gap: 0.25rem 1.5rem; }
+.features li { display: flex; align-items: center; gap: 0.75rem; min-height: 2.75rem; }
+.features svg { width: 1.25rem; height: 1.25rem; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.features span { font-weight: 500; }
+.features small, .features kbd { margin-left: auto; }
+.features small { font-size: 0.75rem; color: var(--faint); white-space: nowrap; }
+.f-k { color: var(--sx-k); } .f-t { color: var(--sx-t); } .f-m { color: var(--sx-m); }
+.f-f { color: var(--sx-f); } .f-s { color: var(--sx-s); } .f-n { color: var(--sx-n); }
+.landing-foot { font-size: 0.75rem; color: var(--faint); text-align: center; }
+.landing-foot a { color: var(--muted); }
+
 /* ---- Dialog ---- */
 dialog {
 	border: 1px solid var(--line);
@@ -684,6 +716,39 @@ dialog .import .steps { gap: 0.75rem; }
 		<nav class="crumbs" id="crumbs" aria-label="Location" hidden></nav>
 		<div id="editor" hidden></div>
 		<div class="viewer-note" id="viewer-note" aria-live="polite"></div>
+		<div class="landing" id="landing" hidden>
+			<div class="landing-inner">
+				<header class="landing-head">
+					<img class="landing-mark" src="/vssrc/icon.eb9404bd.svg" alt="" width="72" height="72">
+					<h2>Vintage Story source, decompiled in your browser</h2>
+					<p class="landing-stats" id="landing-stats"></p>
+					<div class="landing-actions">
+						<button class="button primary" id="landing-search">Search types <kbd>/</kbd></button>
+						<button class="button" id="landing-random">Open a random type</button>
+					</div>
+				</header>
+				<section class="landing-card" aria-labelledby="how-title">
+					<h3 id="how-title">How it works</h3>
+					<ul>
+						<li>The game's code comes from the Linux client archive you open; only its assemblies are kept, in this browser.</li>
+						<li>Decompilation runs entirely in your browser, with <a href="https://github.com/icsharpcode/ILSpy" target="_blank" rel="noopener">ILSpy</a>'s decompiler on .NET WebAssembly.</li>
+						<li>No Vintage Story code is hosted or redistributed by this site.</li>
+					</ul>
+				</section>
+				<section aria-labelledby="features-title">
+					<h3 id="features-title">Features</h3>
+					<ul class="features">
+						<li><svg class="f-k" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>Search types and members</span><kbd>/</kbd></li>
+						<li><svg class="f-t" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/><circle cx="12" cy="12" r="1.5"/></svg><span>Go to definition</span><small>Click a reference</small></li>
+						<li><svg class="f-m" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg><span>Line permalinks</span><small>Click a line number</small></li>
+						<li><svg class="f-f" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4"/><path d="M14 3v5h5v3"/><circle cx="16.5" cy="16.5" r="3"/><path d="m21 21-2.2-2.2"/></svg><span>Find in file</span><kbd>Ctrl F</kbd></li>
+						<li><svg class="f-s" viewBox="0 0 24 24"><rect x="3" y="7" width="14" height="13" rx="2"/><path d="M7 7V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-2"/></svg><span>Tabs</span><small>Kept per version</small></li>
+						<li><svg class="f-n" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/></svg><span>Any game version</span><small>From the version menu</small></li>
+					</ul>
+				</section>
+				<footer class="landing-foot">Inspired by <a href="https://mcsrc.dev/" target="_blank" rel="noopener">mcsrc.dev</a>. Not affiliated with Anego Studios.</footer>
+			</div>
+		</div>
 	</section>
 </div>
 
@@ -979,8 +1044,7 @@ async function route() {
 		editorKey = null;
 		state.shown = null;
 		markCurrent(null);
-		showViewerNote("Pick a type from the list, or press / to search.");
-		if (phone.matches) openSheet(false);
+		showLanding();
 		return;
 	}
 	openTab(h.a, h.t, location.hash);
@@ -1519,7 +1583,33 @@ function getEditor() {
 	return editor;
 }
 
+/** The page shown while no tabs are open. */
+function showLanding() {
+	$("viewer-head").hidden = true;
+	$("crumbs").hidden = true;
+	$("editor").hidden = true;
+	$("viewer-note").hidden = true;
+	$("landing").hidden = false;
+	document.title = PAGE_TITLE;
+	const top = state.listing.types.filter((t) => t.top === t.name).length;
+	$("landing-stats").textContent = `${state.version} · ${top.toLocaleString()} types`;
+}
+
+$("landing-search").addEventListener("click", () => {
+	if (phone.matches) openSheet();
+	$("search").focus();
+});
+$("landing-random").addEventListener("click", () => {
+	const top = state.listing?.types.filter((t) => t.top === t.name) ?? [];
+	if (top.length)
+		location.hash = top[Math.floor(Math.random() * top.length)].href;
+});
+// The find-in-file shortcut, as this platform writes it.
+if (/Mac|iPhone|iPad/.test(navigator.platform))
+	$("landing").querySelector(".f-f").parentElement.querySelector("kbd").textContent = "⌘ F";
+
 function showViewerNote(message, { error = false, action, onAction } = {}) {
+	$("landing").hidden = true;
 	$("viewer-head").hidden = true;
 	$("crumbs").hidden = true;
 	$("editor").hidden = true;
@@ -1558,6 +1648,7 @@ function showHead(a, ns, display) {
 		crumbs.push(p);
 	});
 	$("crumbs").replaceChildren(...crumbs);
+	$("landing").hidden = true;
 	$("viewer-head").hidden = tabs.list.length === 0;
 	$("crumbs").hidden = false;
 }
@@ -1687,7 +1778,6 @@ $("types-button").addEventListener("click", () => {
 });
 phone.addEventListener("change", () => {
 	if (!phone.matches) $("sidebar").classList.remove("open");
-	else if (!state.shown) openSheet(false);
 });
 
 // ---- Screens --------------------------------------------------------------------------------
