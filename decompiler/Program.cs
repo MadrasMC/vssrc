@@ -15,10 +15,13 @@ using ICSharpCode.Decompiler.Metadata;
 using ICSharpCode.Decompiler.TypeSystem;
 using SequencePoint = ICSharpCode.Decompiler.DebugInfo.SequencePoint;
 
+// Only ever runs in the browser; without this, every [JSExport] (browser-only) raises CA1416.
+[assembly: System.Runtime.Versioning.SupportedOSPlatform("browser")]
+
 // The runtime only needs an entry point to exist; all work goes through the [JSExport] methods.
 return;
 
-/// <summary>Entry points called from worker.js. All data crosses as byte[] in and TSV/HTML strings out.</summary>
+/// <summary>Entry points called from worker.ts. All data crosses as byte[] in and TSV/HTML strings out.</summary>
 static partial class Exports
 {
 	/// <summary>Every loaded file, keyed by lowercase file name ("vintagestorylib.dll").</summary>

@@ -10,7 +10,7 @@
 		<UseSystemResourceKeys>true</UseSystemResourceKeys>
 		<WasmFingerprintAssets>false</WasmFingerprintAssets>
 		<WasmEnableWebcil>true</WasmEnableWebcil>
-		<!-- The page loads every file itself from one inlined bundle; no ICU, no debug symbols. -->
+		<!-- The worker loads every file itself from one bundle (runtime.<hash>.bin); no ICU, no debug symbols. -->
 		<DebuggerSupport>false</DebuggerSupport>
 		<WasmEmitSymbolMap>false</WasmEmitSymbolMap>
 		<CopyOutputSymbolsToPublishDirectory>false</CopyOutputSymbolsToPublishDirectory>
@@ -18,7 +18,6 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<SupportedPlatform Include="browser" />
 		<PackageReference Include="ICSharpCode.Decompiler" Version="11.1.0.9782" />
 	</ItemGroup>
 
