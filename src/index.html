@@ -302,7 +302,7 @@ kbd {
 	max-width: 100%;
 }
 .download:hover { background: var(--sunken); }
-.step-head { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.5rem; }
+.step-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem 0.75rem; margin-bottom: 0.5rem; }
 .step-head .step-title { margin: 0; }
 .select { position: relative; display: inline-flex; flex: none; }
 .select select {
@@ -326,7 +326,8 @@ kbd {
 .newer a { color: var(--text); text-underline-offset: 0.2em; }
 .newer strong { color: var(--text); font-weight: 500; }
 .download svg { width: 1.125rem; height: 1.125rem; flex: none; color: var(--muted); }
-.download .file { font: 0.8125rem/1.3 var(--mono); overflow-wrap: anywhere; }
+/* Breaks at any character, so a narrow line fills up instead of breaking after "linux-". */
+.download .file { font: 0.8125rem/1.3 var(--mono); word-break: break-all; }
 .download .size { font-size: 0.75rem; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .drop-hint { font-size: 0.8125rem; color: var(--muted); }
 #file-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
@@ -730,7 +731,7 @@ dialog .import .steps { gap: 0.75rem; }
 				<section class="landing-card" aria-labelledby="how-title">
 					<h3 id="how-title">How it works</h3>
 					<ul>
-						<li>The game's code comes from the Linux client archive you open; only its assemblies are kept, in this browser.</li>
+						<li>The code comes from the Linux client archive you open and stays in this browser.</li>
 						<li>Decompilation runs entirely in your browser, with <a href="https://github.com/icsharpcode/ILSpy" target="_blank" rel="noopener">ILSpy</a>'s decompiler on .NET WebAssembly.</li>
 						<li>No Vintage Story code is hosted or redistributed by this site.</li>
 					</ul>
