@@ -665,12 +665,15 @@ function readTabs() {
 	tabs.active = typeof saved?.active === "string" && tabs.list.some((x) => tabKey(x) === saved.active) ? saved.active : null;
 }
 
-/** Re-reads storage, keeping the tab on screen in this window as its active one. */
+/**
+ * Re-reads storage, keeping the tab on screen in this window as its active one. If another window closed it,
+ * no tab is active here: the code stays on screen, and opening a type adds a tab again.
+ */
 function readTabsKeepingShown() {
 	const shown = state.shown && state.shown.v === tabs.version ? state.shown.a + "|" + state.shown.t : null;
 	readTabs();
-	if (shown && tabs.list.some((x) => tabKey(x) === shown))
-		tabs.active = shown;
+	if (shown)
+		tabs.active = tabs.list.some((x) => tabKey(x) === shown) ? shown : null;
 }
 
 function refreshTabs() {
