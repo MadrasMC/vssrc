@@ -70,8 +70,9 @@
 	--danger: #b3261e;
 	--ok: #2e7d32;
 	--warn: #9a6200;
-	--target: #fbefb8;
-	--active-line: #f7f7f3;
+	/* Translucent, so a selection drawn beneath a highlighted line still shows; over --panel they read #fbefb8 and #f7f7f3. */
+	--target: rgb(242 202 18 / 0.3);
+	--active-line: rgb(175 175 135 / 0.1);
 	--selection: #cfe1f7;
 	--match: #e6eee0;
 	--backdrop: rgb(20 20 18 / 0.32);
@@ -100,8 +101,8 @@
 		--danger: #f08a82;
 		--ok: #82c592;
 		--warn: #e2b45e;
-		--target: #3b3520;
-		--active-line: #1c1d1a;
+		--target: rgb(143 121 55 / 0.3);
+		--active-line: rgb(73 74 62 / 0.1);
 		--selection: #2d3f55;
 		--match: #283225;
 		--backdrop: rgb(0 0 0 / 0.55);
@@ -130,8 +131,8 @@
 	--danger: #f08a82;
 	--ok: #82c592;
 	--warn: #e2b45e;
-	--target: #3b3520;
-	--active-line: #1c1d1a;
+	--target: rgb(143 121 55 / 0.3);
+	--active-line: rgb(73 74 62 / 0.1);
 	--selection: #2d3f55;
 	--match: #283225;
 	--backdrop: rgb(0 0 0 / 0.55);
