@@ -301,8 +301,9 @@ export function create(parent: HTMLElement, { onLineClick, onLink, onGoToLine }:
 				if (!href || event.button !== 0)
 					return false;
 				event.preventDefault();
-				// Links inside an editable region don't navigate natively, so both cases are handled here.
-				if (event.ctrlKey || event.metaKey || event.shiftKey)
+				// Links inside an editable region don't navigate natively, so every click is handled here. Ctrl/⌘+click
+				// follows the link in place, as in code editors; Shift+click opens it in a new tab.
+				if (event.shiftKey)
 					window.open(href, "_blank", "noopener");
 				else
 					onLink(href);
