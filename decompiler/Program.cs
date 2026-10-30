@@ -9,11 +9,9 @@ using ICSharpCode.Decompiler;
 using ICSharpCode.Decompiler.CSharp;
 using ICSharpCode.Decompiler.CSharp.OutputVisitor;
 using ICSharpCode.Decompiler.CSharp.Syntax;
-using ICSharpCode.Decompiler.DebugInfo;
 using ICSharpCode.Decompiler.Disassembler;
 using ICSharpCode.Decompiler.Metadata;
 using ICSharpCode.Decompiler.TypeSystem;
-using SequencePoint = ICSharpCode.Decompiler.DebugInfo.SequencePoint;
 
 // Only ever runs in the browser; without this, every [JSExport] (browser-only) raises CA1416.
 [assembly: System.Runtime.Versioning.SupportedOSPlatform("browser")]
@@ -31,12 +29,7 @@ static partial class Exports
 	static readonly Dictionary<string, CSharpDecompiler> decompilers = new(StringComparer.OrdinalIgnoreCase);
 	static Resolver resolver = new(files);
 	static string version = "";
-	static readonly DecompilerSettings settings = new(LanguageVersion.Latest)
-	{
-		ThrowOnAssemblyResolveErrors = false,
-		FileScopedNamespaces = true,
-		ShowXmlDocumentation = false,
-	};
+	static readonly DecompilerSettings settings = Decompilation.CreateSettings();
 	/// <summary>Assemblies shown in the tree; references into these become links.</summary>
 	static readonly HashSet<string> browsed = new(StringComparer.OrdinalIgnoreCase);
 
@@ -145,12 +138,12 @@ static partial class Exports
 			var module = Get(name).TypeSystem.MainModule;
 			foreach (var td in module.TypeDefinitions)
 			{
-				if (IsHidden(td))
+				if (Decompilation.IsHidden(td))
 					continue;
 				var top = td;
 				while (top.DeclaringTypeDefinition is { } outer)
 					top = outer;
-				if (IsHidden(top))
+				if (Decompilation.IsHidden(top))
 					continue;
 				sb.Append("T\t").Append(name).Append('\t').Append(td.ReflectionName).Append('\t')
 					.Append(KindOf(td)).Append('\t').Append(top.ReflectionName).Append('\t')
@@ -206,8 +199,6 @@ static partial class Exports
 		return decompiler;
 	}
 
-	static bool IsHidden(ITypeDefinition td) => td.Name.StartsWith('<') || td.Name.Contains("<>") || td.IsCompilerGenerated();
-
 	static string KindOf(ITypeDefinition td) => td.Kind switch
 	{
 		TypeKind.Interface => "interface",
@@ -243,56 +234,6 @@ sealed class Resolver(Dictionary<string, byte[]> files) : IAssemblyResolver
 	public Task<MetadataFile?> ResolveAsync(IAssemblyReference reference) => Task.FromResult(Resolve(reference));
 	public Task<MetadataFile?> ResolveModuleAsync(MetadataFile mainModule, string moduleName) => Task.FromResult<MetadataFile?>(null);
 	public IDisposable BeginSnapshot() => new MemoryStream();
-}
-
-/// <summary>Local variable names from a portable PDB. Sequence points are not needed for display.</summary>
-sealed class PdbProvider : IDebugInfoProvider
-{
-	readonly MetadataReader reader;
-
-	public PdbProvider(byte[] pdb)
-	{
-		reader = MetadataReaderProvider.FromPortablePdbImage(ImmutableArray.Create(pdb)).GetMetadataReader();
-	}
-
-	public string Description => "Portable PDB";
-	public string SourceFileName => "";
-
-	public IList<SequencePoint> GetSequencePoints(MethodDefinitionHandle method) => [];
-
-	public IList<Variable> GetVariables(MethodDefinitionHandle method)
-	{
-		var list = new List<Variable>();
-		foreach (var scope in reader.GetLocalScopes(method))
-			foreach (var vh in reader.GetLocalScope(scope).GetLocalVariables())
-			{
-				var v = reader.GetLocalVariable(vh);
-				list.Add(new Variable(v.Index, reader.GetString(v.Name)));
-			}
-		return list;
-	}
-
-	public bool TryGetName(MethodDefinitionHandle method, int index, out string name)
-	{
-		foreach (var scope in reader.GetLocalScopes(method))
-			foreach (var vh in reader.GetLocalScope(scope).GetLocalVariables())
-			{
-				var v = reader.GetLocalVariable(vh);
-				if (v.Index == index && (v.Attributes & LocalVariableAttributes.DebuggerHidden) == 0)
-				{
-					name = reader.GetString(v.Name);
-					return true;
-				}
-			}
-		name = null!;
-		return false;
-	}
-
-	public bool TryGetExtraTypeInfo(MethodDefinitionHandle method, int index, out PdbExtraTypeInfo extraTypeInfo)
-	{
-		extraTypeInfo = default;
-		return false;
-	}
 }
 
 /// <summary>

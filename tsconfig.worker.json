@@ -4,5 +4,5 @@
 	"compilerOptions": {
 		"lib": ["ES2023", "WebWorker"]
 	},
-	"include": ["src/worker.ts", "src/protocol.ts"]
+	"include": ["src/worker.ts", "src/protocol.ts", "src/archive.ts"]
 }
