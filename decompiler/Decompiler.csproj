@@ -26,4 +26,10 @@
 		<TrimmerRootAssembly Include="ICSharpCode.Decompiler" />
 	</ItemGroup>
 
+	<ItemGroup>
+		<!-- The command-line host (bun run decompile) is its own project; it compiles the shared files from here. -->
+		<Compile Remove="cli/**" />
+		<None Remove="cli/**" />
+	</ItemGroup>
+
 </Project>

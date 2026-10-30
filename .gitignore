@@ -3,3 +3,6 @@ decompiler/bin/
 decompiler/obj/
 node_modules/
 dist/
+decompiler/cli/bin/
+decompiler/cli/obj/
+vintage-story-source/

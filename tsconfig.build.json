@@ -1,9 +1,9 @@
 {
-	// The build script, run by Bun.
+	// The build and decompile scripts, run by Bun.
 	"extends": "./tsconfig.json",
 	"compilerOptions": {
 		"lib": ["ESNext"],
 		"types": ["bun"]
 	},
-	"include": ["build.ts", "src/versions.ts"]
+	"include": ["build.ts", "decompile.ts", "src/versions.ts", "src/archive.ts"]
 }

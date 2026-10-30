@@ -4,6 +4,7 @@
 	"type": "module",
 	"scripts": {
 		"emit": "bun build.ts",
+		"decompile": "bun decompile.ts",
 		"check": "tsc -p tsconfig.json && tsc -p tsconfig.worker.json && tsc -p tsconfig.build.json"
 	},
 	"devDependencies": {

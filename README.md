@@ -40,7 +40,24 @@ It fetches the version list from api.vintagestory.at, so it needs network access
 | `--skip-dotnet` | reuse the last `dotnet publish` |
 
 The flags combine.
-`bun run check` type-checks the page, the worker and the build script.
+`bun run check` type-checks the page, the worker and the build and decompile scripts.
+
+## Decompile
+
+```bash
+bun run decompile
+```
+
+`decompile` downloads the latest stable Linux client from the Vintage Story CDN and decompiles the assemblies the page shows into `vintage-story-source/<version>/<assembly>/` in the current folder.
+Each top-level type gets its own `.cs` file, in folders by namespace, decompiled with the same settings as the page.
+Each assembly's folder is replaced on every run.
+
+| argument | effect |
+| --- | --- |
+| `<version>` | decompile that version instead, stable or pre-release, e.g. `1.21.6` |
+| `--out <folder>` | write into `<folder>/<version>/` instead |
+
+It builds and runs the command-line decompiler in `decompiler/cli/`, so it needs the .NET SDK in `.dotnet/` as well as network access.
 
 ## Deploy
 

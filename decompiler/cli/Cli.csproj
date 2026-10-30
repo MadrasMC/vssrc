@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<!-- The command-line host behind bun run decompile (see decompile.ts). -->
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<OutputType>Exe</OutputType>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<InvariantGlobalization>true</InvariantGlobalization>
+		<ServerGarbageCollection>true</ServerGarbageCollection>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="ICSharpCode.Decompiler" Version="11.1.0.9782" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<!-- Shared with the page's decompiler, so both decompile the same way. -->
+		<Compile Include="../Decompilation.cs" />
+		<Compile Include="../PdbProvider.cs" />
+	</ItemGroup>
+
+</Project>
